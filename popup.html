@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Контроль участников</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <div class="heading">
+        <div class="logo" aria-hidden="true">✓</div>
+        <div>
+          <h1>Контроль участников</h1>
+          <p>VirtualRoom</p>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <label for="roster-select">Список мероприятия</label>
+        <button id="new-roster" class="text-button" type="button">+ Новый</button>
+      </div>
+      <select id="roster-select" aria-label="Выберите список"></select>
+
+      <label for="roster-name">Название списка</label>
+      <input id="roster-name" type="text" maxlength="80" placeholder="Например, еженедельный митап" />
+
+      <label class="room-binding editor-mode-setting">
+        <input id="detailed-editor-toggle" type="checkbox" />
+        <span>Подробный редактор: имя, статус и псевдонимы</span>
+      </label>
+
+      <section id="simple-editor">
+        <label for="roster">Кого ждём</label>
+        <textarea
+          id="roster"
+          rows="10"
+          spellcheck="false"
+          placeholder="Иван Иванов&#10;Мария Петрова&#10;Алексей Сидоров"
+        ></textarea>
+        <p class="hint">По одному человеку на строку. Порядок имени и фамилии не важен.</p>
+      </section>
+
+      <section id="detailed-editor" hidden>
+        <div class="field-row detailed-heading">
+          <span>Участники</span>
+          <button id="add-participant" class="text-button" type="button">+ Добавить</button>
+        </div>
+        <div id="participant-rows" class="participant-rows"></div>
+        <p class="hint">Статусы с конечной датой снимаются автоматически после её окончания.</p>
+      </section>
+
+      <label class="room-binding">
+        <input id="bind-room" type="checkbox" />
+        <span>Автоматически выбирать для этой комнаты</span>
+      </label>
+      <p id="room-label" class="room-label"></p>
+
+      <label class="room-binding highlight-setting">
+        <input id="highlight-present" type="checkbox" />
+        <span>Подсвечивать пришедших пользователей</span>
+      </label>
+
+      <div class="actions">
+        <button id="delete-roster" class="danger" type="button" title="Удалить выбранный список">Удалить</button>
+        <button id="save" class="secondary" type="button">Сохранить</button>
+        <button id="check" class="primary" type="button">Проверить сейчас</button>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+    </main>
+    <script src="common.js"></script>
+    <script src="storage.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

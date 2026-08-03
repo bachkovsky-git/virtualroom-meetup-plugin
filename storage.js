@@ -1,0 +1,134 @@
+(function (root) {
+  "use strict";
+
+  const STATE_KEYS = [
+    "rosters",
+    "roomAssignments",
+    "selectedRosterId",
+    "highlightPresent",
+    "missingCollapsed",
+    "detailedEditor",
+    "expectedParticipants",
+    "rosterText"
+  ];
+
+  function newId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return `roster-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function cleanRoster(roster) {
+    if (!roster || !roster.id) return null;
+    const participants = VRMeetups.parseExpected(
+      Array.isArray(roster.participants) ? roster.participants.join("\n") : roster.participants
+    );
+    const participantKeys = new Set(participants.map(VRMeetups.comparisonKey));
+    const statuses = {};
+    Object.entries(roster.statuses || {}).forEach(([nameKey, status]) => {
+      const normalizedKey = VRMeetups.comparisonKey(nameKey);
+      const normalizedStatus = VRMeetups.normalizeStatus(status);
+      if (participantKeys.has(normalizedKey) && normalizedStatus) {
+        statuses[normalizedKey] = normalizedStatus;
+      }
+    });
+    const aliases = {};
+    const claimedAliasKeys = new Set(participantKeys);
+    Object.entries(roster.aliases || {}).forEach(([nameKey, values]) => {
+      const expectedKey = VRMeetups.comparisonKey(nameKey);
+      if (!participantKeys.has(expectedKey)) return;
+
+      const uniqueAliases = [];
+      (Array.isArray(values) ? values : [values]).forEach((alias) => {
+        const displayName = String(alias || "").replace(/\s+/g, " ").trim();
+        const aliasKey = VRMeetups.comparisonKey(displayName);
+        if (!aliasKey || claimedAliasKeys.has(aliasKey)) return;
+        claimedAliasKeys.add(aliasKey);
+        uniqueAliases.push(displayName);
+      });
+      if (uniqueAliases.length) aliases[expectedKey] = uniqueAliases;
+    });
+    return {
+      id: String(roster.id),
+      name: String(roster.name || "Без названия").trim() || "Без названия",
+      participants,
+      statuses,
+      aliases,
+      createdAt: roster.createdAt || Date.now(),
+      updatedAt: roster.updatedAt || Date.now()
+    };
+  }
+
+  async function load() {
+    const stored = await chrome.storage.local.get(STATE_KEYS);
+    let rosters = Array.isArray(stored.rosters)
+      ? stored.rosters.map(cleanRoster).filter(Boolean)
+      : [];
+    let migrated = false;
+
+    if (!rosters.length) {
+      const legacyParticipants = VRMeetups.parseExpected(
+        Array.isArray(stored.expectedParticipants)
+          ? stored.expectedParticipants.join("\n")
+          : stored.rosterText
+      );
+
+      if (legacyParticipants.length) {
+        rosters = [{
+          id: newId(),
+          name: "Основной список",
+          participants: legacyParticipants,
+          statuses: {},
+          aliases: {},
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        }];
+        migrated = true;
+      }
+    }
+
+    const validIds = new Set(rosters.map((roster) => roster.id));
+    const roomAssignments = Object.fromEntries(
+      Object.entries(stored.roomAssignments || {}).filter(([, rosterId]) => validIds.has(rosterId))
+    );
+    const selectedRosterId = validIds.has(stored.selectedRosterId)
+      ? stored.selectedRosterId
+      : (rosters[0]?.id || null);
+
+    const state = {
+      rosters,
+      roomAssignments,
+      selectedRosterId,
+      highlightPresent: stored.highlightPresent !== false,
+      missingCollapsed: stored.missingCollapsed === true,
+      detailedEditor: stored.detailedEditor === true
+    };
+    const sanitized = Array.isArray(stored.rosters) && JSON.stringify(stored.rosters) !== JSON.stringify(rosters);
+    if (migrated || sanitized) await save(state);
+    return state;
+  }
+
+  async function save(state) {
+    const rosters = (state.rosters || []).map(cleanRoster).filter(Boolean);
+    const selected = VRMeetups.rosterById(rosters, state.selectedRosterId) || rosters[0] || null;
+    const validIds = new Set(rosters.map((roster) => roster.id));
+    const roomAssignments = Object.fromEntries(
+      Object.entries(state.roomAssignments || {}).filter(([, rosterId]) => validIds.has(rosterId))
+    );
+
+    const cleanState = {
+      rosters,
+      roomAssignments,
+      selectedRosterId: selected?.id || null,
+      highlightPresent: state.highlightPresent !== false,
+      missingCollapsed: state.missingCollapsed === true,
+      detailedEditor: state.detailedEditor === true,
+      // These two fields keep version 1.0 data compatible during an update.
+      expectedParticipants: selected?.participants || [],
+      rosterText: (selected?.participants || []).join("\n")
+    };
+    await chrome.storage.local.set(cleanState);
+    return cleanState;
+  }
+
+  root.VRMStorage = { load, save, newId };
+})(typeof globalThis !== "undefined" ? globalThis : window);

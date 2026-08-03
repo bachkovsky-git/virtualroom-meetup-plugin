@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "VirtualRoom — контроль участников",
+  "version": "1.5.1",
+  "description": "Сравнивает список приглашённых со списком участников VirtualRoom и показывает тех, кто не пришёл.",
+  "permissions": ["storage", "activeTab"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["common.js", "storage.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Проверить участников",
+    "default_popup": "popup.html"
+  }
+}
