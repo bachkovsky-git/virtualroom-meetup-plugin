@@ -8,6 +8,8 @@
     "highlightPresent",
     "missingCollapsed",
     "detailedEditor",
+    "mattermostUrl",
+    "showMattermostStatuses",
     "expectedParticipants",
     "rosterText"
   ];
@@ -15,6 +17,25 @@
   function newId() {
     if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
     return `roster-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  // Источник состава: null — список ведётся руками, иначе канал Mattermost.
+  function cleanSource(source) {
+    if (!source || source.type !== "mattermost") return null;
+    const baseUrl = VRMattermost.normalizeBaseUrl(source.baseUrl);
+    const channelId = String(source.channelId || "").trim();
+    const channelName = String(source.channelName || "").trim();
+    if (!baseUrl || (!channelId && !channelName)) return null;
+    return {
+      type: "mattermost",
+      baseUrl,
+      teamId: String(source.teamId || "").trim(),
+      teamName: String(source.teamName || "").trim(),
+      channelId,
+      channelName,
+      channelDisplayName: String(source.channelDisplayName || channelName).trim(),
+      syncedAt: Number(source.syncedAt) || 0
+    };
   }
 
   function cleanRoster(roster) {
@@ -53,6 +74,7 @@
       participants,
       statuses,
       aliases,
+      source: cleanSource(roster.source),
       createdAt: roster.createdAt || Date.now(),
       updatedAt: roster.updatedAt || Date.now()
     };
@@ -100,7 +122,9 @@
       selectedRosterId,
       highlightPresent: stored.highlightPresent !== false,
       missingCollapsed: stored.missingCollapsed === true,
-      detailedEditor: stored.detailedEditor === true
+      detailedEditor: stored.detailedEditor === true,
+      mattermostUrl: VRMattermost.normalizeBaseUrl(stored.mattermostUrl),
+      showMattermostStatuses: stored.showMattermostStatuses !== false
     };
     const sanitized = Array.isArray(stored.rosters) && JSON.stringify(stored.rosters) !== JSON.stringify(rosters);
     if (migrated || sanitized) await save(state);
@@ -122,6 +146,8 @@
       highlightPresent: state.highlightPresent !== false,
       missingCollapsed: state.missingCollapsed === true,
       detailedEditor: state.detailedEditor === true,
+      mattermostUrl: VRMattermost.normalizeBaseUrl(state.mattermostUrl),
+      showMattermostStatuses: state.showMattermostStatuses !== false,
       // These two fields keep version 1.0 data compatible during an update.
       expectedParticipants: selected?.participants || [],
       rosterText: (selected?.participants || []).join("\n")

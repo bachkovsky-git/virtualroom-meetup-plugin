@@ -17,6 +17,15 @@
   const saveButton = document.getElementById("save");
   const checkButton = document.getElementById("check");
   const statusBox = document.getElementById("status");
+  const mmEnabled = document.getElementById("mm-enabled");
+  const mmFields = document.getElementById("mm-fields");
+  const mmUrl = document.getElementById("mm-url");
+  const mmConnect = document.getElementById("mm-connect");
+  const mmTeam = document.getElementById("mm-team");
+  const mmChannel = document.getElementById("mm-channel");
+  const mmLoad = document.getElementById("mm-load");
+  const mmInfo = document.getElementById("mm-info");
+  const mmStatuses = document.getElementById("mm-statuses");
 
   let state = {
     rosters: [],
@@ -29,6 +38,9 @@
   let currentTab = null;
   let draftId = null;
   let detailedRows = [];
+  let draftSource = null;
+  let mmTeams = [];
+  let mmChannels = [];
 
   function showStatus(message, kind) {
     statusBox.textContent = message;
@@ -47,6 +59,135 @@
   async function getActiveTab() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     return tab || null;
+  }
+
+  // --- Mattermost ---------------------------------------------------------
+
+  function mmSay(message, kind) {
+    mmInfo.textContent = message;
+    mmInfo.className = kind ? `hint mm-${kind}` : "hint";
+  }
+
+  async function mmSend(message) {
+    const response = await chrome.runtime.sendMessage(message);
+    if (!response?.ok) throw new Error(response?.message || "Mattermost не ответил.");
+    return response;
+  }
+
+  function fillOptions(select, items, selectedValue, placeholder) {
+    select.replaceChildren();
+    if (!items.length) select.add(new Option(placeholder, ""));
+    items.forEach((item) => select.add(new Option(item.label, item.value)));
+    select.disabled = !items.length;
+    if (selectedValue && items.some((item) => item.value === selectedValue)) select.value = selectedValue;
+  }
+
+  function renderSource() {
+    const linked = Boolean(draftSource);
+    mmEnabled.checked = linked || mmEnabled.checked;
+    mmFields.hidden = !mmEnabled.checked;
+    rosterText.readOnly = linked;
+    rosterText.classList.toggle("readonly", linked);
+    mmLoad.disabled = !mmChannel.value;
+    if (linked) {
+      mmUrl.value = draftSource.baseUrl;
+      const synced = draftSource.syncedAt
+        ? new Date(draftSource.syncedAt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+        : "ещё не обновлялся";
+      mmSay(`Канал «${draftSource.channelDisplayName || draftSource.channelName}», обновлён: ${synced}.`);
+    } else if (!mmUrl.value) {
+      mmUrl.value = state.mattermostUrl || "";
+    }
+  }
+
+  async function mmFillTeams(baseUrl, preferredTeamId) {
+    const { teams } = await mmSend({ type: "VRM_MM_TEAMS", baseUrl });
+    mmTeams = teams;
+    fillOptions(mmTeam, teams.map((team) => ({ value: team.id, label: team.displayName })), preferredTeamId, "Команд не найдено");
+    if (mmTeam.value) await mmFillChannels(baseUrl, mmTeam.value, draftSource?.channelId);
+  }
+
+  async function mmFillChannels(baseUrl, teamId, preferredChannelId) {
+    const { channels } = await mmSend({ type: "VRM_MM_CHANNELS", baseUrl, teamId });
+    mmChannels = channels;
+    fillOptions(
+      mmChannel,
+      channels.map((channel) => ({ value: channel.id, label: `${channel.private ? "🔒 " : ""}${channel.displayName}` })),
+      preferredChannelId,
+      "Каналов не найдено"
+    );
+    mmLoad.disabled = !mmChannel.value;
+  }
+
+  async function mmConnectClick() {
+    const baseUrl = VRMattermost.normalizeBaseUrl(mmUrl.value);
+    if (!baseUrl) {
+      mmSay("Укажите адрес, например https://mattermost.example.com.", "error");
+      return;
+    }
+    // Разрешение на домен запрашивается по клику: без жеста Chrome откажет.
+    const granted = await chrome.permissions.request({ origins: [`${VRMattermost.originOf(baseUrl)}/*`] });
+    if (!granted) {
+      mmSay("Без доступа к этому адресу расширение не сможет читать канал.", "error");
+      return;
+    }
+
+    mmConnect.disabled = true;
+    mmSay("Проверяю подключение…");
+    try {
+      const { user } = await mmSend({ type: "VRM_MM_CONNECT", baseUrl });
+      mmUrl.value = baseUrl;
+      state.mattermostUrl = baseUrl;
+      state = await VRMStorage.save(state);
+      mmSay(`Подключено как ${user.name || user.username}. Выберите команду и канал.`, "success");
+      await mmFillTeams(baseUrl, draftSource?.teamId);
+    } catch (error) {
+      mmSay(error.message, "error");
+    } finally {
+      mmConnect.disabled = false;
+    }
+  }
+
+  async function mmLoadMembers() {
+    const baseUrl = VRMattermost.normalizeBaseUrl(mmUrl.value);
+    const team = mmTeams.find((item) => item.id === mmTeam.value);
+    const channel = mmChannels.find((item) => item.id === mmChannel.value);
+    if (!baseUrl || !team || !channel) {
+      mmSay("Выберите команду и канал.", "error");
+      return;
+    }
+
+    mmLoad.disabled = true;
+    mmSay("Читаю состав канала…");
+    try {
+      const source = {
+        type: "mattermost",
+        baseUrl,
+        teamId: team.id,
+        teamName: team.name,
+        channelId: channel.id,
+        channelName: channel.name,
+        channelDisplayName: channel.displayName,
+        syncedAt: 0
+      };
+      const snapshot = await mmSend({ type: "VRM_MM_SNAPSHOT", source, force: true });
+      const existing = VRMeetups.rosterById(state.rosters, draftId);
+      const merged = VRMattermost.applySnapshot({ aliases: existing?.aliases || {} }, snapshot.members);
+
+      draftSource = { ...source, syncedAt: snapshot.fetchedAt };
+      rosterText.value = merged.participants.join("\n");
+      detailedRows = merged.participants.map((name) =>
+        rowFromParticipant(name, { aliases: merged.aliases, statuses: existing?.statuses || {} })
+      );
+      if (!rosterName.value.trim()) rosterName.value = channel.displayName;
+      applyEditorMode();
+      renderSource();
+      mmSay(`Загружено ${merged.participants.length} чел. из «${channel.displayName}». Не забудьте «Сохранить».`, "success");
+    } catch (error) {
+      mmSay(error.message, "error");
+    } finally {
+      mmLoad.disabled = false;
+    }
   }
 
   function fillSelect(selectedId) {
@@ -220,7 +361,10 @@
     rosterText.value = (roster?.participants || []).join("\n");
     detailedRows = (roster?.participants || []).map((name) => rowFromParticipant(name, roster));
     deleteButton.disabled = !roster;
+    draftSource = roster?.source ? { ...roster.source } : null;
+    mmEnabled.checked = Boolean(draftSource);
     applyEditorMode();
+    renderSource();
   }
 
   function selectRoster(id) {
@@ -240,7 +384,10 @@
     detailedRows = [];
     bindRoom.checked = false;
     deleteButton.disabled = true;
+    draftSource = null;
+    mmEnabled.checked = false;
     applyEditorMode();
+    renderSource();
     rosterName.focus();
     showStatus("Введите название и состав нового списка.", "success");
   }
@@ -286,6 +433,7 @@
       participants,
       statuses,
       aliases,
+      source: draftSource,
       createdAt: existing?.createdAt || Date.now(),
       updatedAt: Date.now()
     };
@@ -359,11 +507,32 @@
     roomLabel.title = currentRoomKey;
     state = await VRMStorage.load();
     highlightPresent.checked = state.highlightPresent !== false;
+    mmStatuses.checked = state.showMattermostStatuses !== false;
+    mmUrl.value = state.mattermostUrl || "";
     const activeRoster = VRMeetups.rosterForRoom(state, currentRoomKey);
     fillSelect(activeRoster?.id);
     showRoster(activeRoster);
     bindRoom.checked = Boolean(activeRoster && state.roomAssignments[currentRoomKey] === activeRoster.id);
     if (!activeRoster) startNewRoster();
+    if (draftSource) mmAutoConnect();
+  }
+
+  // Если доступ к серверу уже выдан, списки команд и каналов подтягиваются
+  // молча — без повторного нажатия «Войти».
+  async function mmAutoConnect() {
+    const baseUrl = VRMattermost.normalizeBaseUrl(mmUrl.value || state.mattermostUrl);
+    if (!baseUrl) return;
+    const access = await chrome.runtime.sendMessage({ type: "VRM_MM_ACCESS", baseUrl });
+    if (!access?.granted) {
+      mmSay("Нажмите «Войти», чтобы разрешить расширению читать этот сервер.");
+      return;
+    }
+    try {
+      await mmFillTeams(baseUrl, draftSource?.teamId || mmTeam.value);
+      if (!draftSource) mmSay("Выберите команду и канал.");
+    } catch (error) {
+      mmSay(error.message, "error");
+    }
   }
 
   rosterSelect.addEventListener("change", () => selectRoster(rosterSelect.value));
@@ -388,6 +557,29 @@
   deleteButton.addEventListener("click", () => deleteRoster().catch((error) => showStatus(error.message, "error")));
   saveButton.addEventListener("click", () => saveRoster(true).catch((error) => showStatus(error.message, "error")));
   checkButton.addEventListener("click", checkParticipants);
+  mmEnabled.addEventListener("change", () => {
+    mmFields.hidden = !mmEnabled.checked;
+    if (mmEnabled.checked) {
+      if (!mmUrl.value) mmUrl.value = state.mattermostUrl || "";
+      mmAutoConnect();
+    } else {
+      draftSource = null;
+      renderSource();
+      mmSay("Список снова редактируется вручную. Нажмите «Сохранить».");
+    }
+  });
+  mmConnect.addEventListener("click", mmConnectClick);
+  mmTeam.addEventListener("change", () => {
+    mmFillChannels(VRMattermost.normalizeBaseUrl(mmUrl.value), mmTeam.value, draftSource?.channelId)
+      .catch((error) => mmSay(error.message, "error"));
+  });
+  mmChannel.addEventListener("change", () => { mmLoad.disabled = !mmChannel.value; });
+  mmLoad.addEventListener("click", mmLoadMembers);
+  mmStatuses.addEventListener("change", async () => {
+    state.showMattermostStatuses = mmStatuses.checked;
+    state = await VRMStorage.save(state);
+    showStatus(mmStatuses.checked ? "Статусы из Mattermost включены." : "Статусы из Mattermost выключены.", "success");
+  });
   highlightPresent.addEventListener("change", async () => {
     state.highlightPresent = highlightPresent.checked;
     state = await VRMStorage.save(state);

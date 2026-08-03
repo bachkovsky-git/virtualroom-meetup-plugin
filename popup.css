@@ -66,7 +66,8 @@ label:not(.room-binding) {
 }
 
 select,
-input[type="text"] {
+input[type="text"],
+input[type="url"] {
   width: 100%;
   height: 38px;
   margin-bottom: 13px;
@@ -80,6 +81,7 @@ input[type="text"] {
 }
 
 select:focus,
+input[type="url"]:focus,
 input[type="text"]:focus {
   border-color: #20a66a;
   box-shadow: 0 0 0 3px rgba(32, 166, 106, 0.13);
@@ -116,6 +118,36 @@ textarea {
   font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mm-setting { margin: 0 0 13px; }
+
+.mm-fields {
+  margin: 0 0 13px;
+  border: 1px solid #d8dfe2;
+  border-radius: 10px;
+  padding: 11px 11px 2px;
+  background: #eef2f3;
+}
+
+.mm-fields label { font-size: 12px; }
+.mm-fields .hint { margin: 9px 0 11px; }
+.mm-fields .mm-error { color: #8b3030; }
+.mm-fields .mm-success { color: #12643f; }
+
+.inline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.inline-row input { flex: 1; }
+.inline-row button { flex: 0 0 84px; min-height: 38px; margin-bottom: 13px; }
+.wide { width: 100%; }
+
+textarea.readonly {
+  color: #4c5a60;
+  background: #f1f4f5;
 }
 
 .highlight-setting { margin: 0 0 14px; }
