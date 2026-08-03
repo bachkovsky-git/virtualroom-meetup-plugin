@@ -64,13 +64,69 @@
   white-space: nowrap;
 }
 
+#vrm-attendance-missing .vrm-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+#vrm-attendance-missing .vrm-mattermost-button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  color: #8e9ca0;
+  background: transparent;
+  cursor: pointer;
+  font: 700 12px inherit;
+}
+
+#vrm-attendance-missing .vrm-mattermost-button:hover {
+  color: #fff;
+  background: rgba(142, 156, 160, 0.22);
+}
+
+#vrm-attendance-missing .vrm-mattermost-button svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+#vrm-attendance-missing .vrm-mattermost-button.vrm-has-warning { color: #e0a13c; }
+
+#vrm-attendance-missing .vrm-mattermost-button.vrm-is-busy {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+#vrm-attendance-missing .vrm-presence {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 8px;
+  color: #6f7d82;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+#vrm-attendance-missing .vrm-presence-online { color: #35bd7d; }
+#vrm-attendance-missing .vrm-presence-away { color: #d8a24a; }
+#vrm-attendance-missing .vrm-presence-dnd { color: #d1706b; }
+
+#vrm-attendance-missing .vrm-missing-avatar.vrm-from-mattermost {
+  background: rgba(142, 156, 160, 0.34);
+}
+
 #vrm-attendance-missing .vrm-settings-button {
   display: grid;
   width: 26px;
   height: 26px;
   flex: 0 0 26px;
   place-items: center;
-  margin-left: auto;
   border: 0;
   border-radius: 50%;
   padding: 0;
@@ -268,6 +324,43 @@
   color: #92a1a7;
   font-size: 10px;
 }
+
+#vrm-roster-picker textarea.vrm-is-readonly {
+  opacity: 0.72;
+  cursor: default;
+}
+
+#vrm-roster-picker .vrm-picker-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  border: 1px solid rgba(53, 189, 125, 0.35);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: rgba(53, 189, 125, 0.09);
+  font-size: 11px;
+}
+
+#vrm-roster-picker .vrm-picker-source span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #cbd3d6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#vrm-roster-picker .vrm-picker-source button {
+  min-height: 26px;
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  color: #dce4e6;
+  background: #435158;
+  font: 700 11px inherit;
+}
+
+#vrm-roster-picker .vrm-picker-source button:disabled { opacity: 0.6; cursor: default; }
 
 #vrm-roster-picker .vrm-picker-aliases-label { margin-top: 12px; }
 

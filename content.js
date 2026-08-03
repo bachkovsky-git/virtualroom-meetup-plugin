@@ -24,6 +24,11 @@
   let statusMenuOutsideHandler = null;
   let lastActualNames = new Map();
   let midnightRefreshTimer = null;
+  let mattermostRefreshTimer = null;
+  let mmMembers = new Map();
+  let mmSnapshot = null;
+  let mmNotice = "";
+  let appliedSnapshotKey = "";
 
   function currentRoomKey() {
     return VRMeetups.roomKey(location.href);
@@ -47,6 +52,100 @@
       else updatePresentMarkers();
       scheduleMidnightRefresh();
     }, Math.max(1000, nextMidnight.getTime() - now.getTime()));
+  }
+
+  // --- Mattermost ---------------------------------------------------------
+
+  // Состав канала подтягивается всегда, а показ статусов можно выключить:
+  // это две независимые вещи.
+  function mattermostLinked() {
+    return VRMattermost.isMattermost(activeRoster);
+  }
+
+  function mattermostStatusesShown() {
+    return state.showMattermostStatuses !== false;
+  }
+
+  function memberForName(name) {
+    return mmMembers.get(VRMeetups.comparisonKey(name)) || null;
+  }
+
+  // Состав канала — источник истины: участники и их ники переезжают в список.
+  async function applyMattermostSnapshot(snapshot) {
+    const snapshotKey = `${activeRoster?.id}:${VRMattermost.sourceKey(activeRoster?.source)}@${snapshot.fetchedAt}`;
+    if (appliedSnapshotKey === snapshotKey) return;
+    appliedSnapshotKey = snapshotKey;
+
+    const index = state.rosters.findIndex((roster) => roster.id === activeRoster?.id);
+    if (index < 0) return;
+    const current = state.rosters[index];
+    const { participants, aliases } = VRMattermost.applySnapshot(current, snapshot.members);
+    const unchanged = JSON.stringify(current.participants) === JSON.stringify(participants) &&
+      JSON.stringify(current.aliases) === JSON.stringify(aliases);
+    if (unchanged) return;
+
+    state.rosters[index] = {
+      ...current,
+      participants,
+      aliases,
+      source: { ...current.source, syncedAt: snapshot.fetchedAt },
+      updatedAt: Date.now()
+    };
+    ignoreMutationsUntil = Date.now() + 1000;
+    state = await VRMStorage.save(state);
+    activeRoster = VRMeetups.rosterById(state.rosters, current.id);
+  }
+
+  async function refreshMattermost(force) {
+    mmSnapshot = null;
+    mmMembers = new Map();
+    mmNotice = "";
+    if (!mattermostLinked()) return null;
+
+    let response;
+    try {
+      response = await chrome.runtime.sendMessage({
+        type: "VRM_MM_SNAPSHOT",
+        source: activeRoster.source,
+        force: force === true
+      });
+    } catch (error) {
+      mmNotice = "Mattermost недоступен: перезагрузите вкладку после обновления расширения.";
+      return null;
+    }
+    if (!response?.ok) {
+      mmNotice = response?.message || "Не удалось получить данные из Mattermost.";
+      return null;
+    }
+
+    mmSnapshot = response;
+    if (mattermostStatusesShown()) mmMembers = VRMattermost.membersByKey(response.members);
+    if (response.warning) mmNotice = `Данные из Mattermost устарели: ${response.warning}`;
+    await applyMattermostSnapshot(response);
+    return response;
+  }
+
+  // Статусы обновляются без повторного чтения списка: прокрутка чужой панели
+  // заметна, а сравнение можно пересчитать по прошлому снимку имён.
+  async function refreshMattermostStatuses() {
+    if (!mattermostLinked() || !mattermostStatusesShown() || scanning) return;
+    const panel = findPanel();
+    if (!panel || !lastActualNames.size) return;
+
+    await refreshMattermost(true);
+    if (!activeRoster) return;
+    const actualNameKeys = new Set(lastActualNames.keys());
+    const missing = activeRoster.participants.filter(
+      (name) => !VRMeetups.participantIsPresent(activeRoster, name, actualNameKeys)
+    );
+    renderResult(panel.scroller, missing);
+    updatePresentMarkers();
+    ignoreMutationsUntil = Date.now() + 1000;
+  }
+
+  function scheduleMattermostRefresh() {
+    clearInterval(mattermostRefreshTimer);
+    mattermostRefreshTimer = setInterval(refreshMattermostStatuses, 300000);
   }
 
   function readNames(scope, namesByKey) {
@@ -123,9 +222,11 @@
       dot.type = "button";
       dot.className = "vrm-present-dot";
       dot.setAttribute("data-vrm-extension", "true");
-      dot.title = storedStatus
+      const member = memberForName(expectedName);
+      const mattermostText = member ? ` В Mattermost: ${VRMattermost.describe(member)}.` : "";
+      dot.title = (storedStatus
         ? `${name} сопоставлен с ${expectedName}: ${statusDescription(storedStatus)}. Нажмите, чтобы изменить или снять статус`
-        : `${name} — пришёл. Нажмите, чтобы установить статус`;
+        : `${name} — пришёл. Нажмите, чтобы установить статус`) + mattermostText;
       dot.setAttribute("aria-label", dot.title);
       dot.setAttribute("aria-haspopup", "menu");
       dot.addEventListener("click", (event) => {
@@ -148,6 +249,33 @@
       event.preventDefault();
       event.stopPropagation();
       showRosterPicker();
+    });
+    return button;
+  }
+
+  function createMattermostButton() {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "vrm-mattermost-button";
+    const channel = activeRoster.source.channelDisplayName || activeRoster.source.channelName;
+    if (mmNotice) {
+      button.classList.add("vrm-has-warning");
+      button.textContent = "!";
+      button.title = `${mmNotice} Нажмите, чтобы повторить.`;
+    } else {
+      const synced = mmSnapshot?.fetchedAt
+        ? new Date(mmSnapshot.fetchedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+        : "—";
+      button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5V.8L4.6 3.2 8 5.6V3.9a4.1 4.1 0 1 1-4 5l-1.4.4A5.5 5.5 0 1 0 8 2.5z"></path></svg>';
+      button.title = `Канал Mattermost «${channel}», обновлено в ${synced}. Нажмите, чтобы обновить состав и статусы`;
+    }
+    button.setAttribute("aria-label", button.title);
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      button.classList.add("vrm-is-busy");
+      await refreshMattermost(true);
+      await scanParticipants(activeRoster?.id);
     });
     return button;
   }
@@ -193,12 +321,21 @@
       vacation: { icon: "🌴", label: "в отпуске" },
       absent: { icon: "🚌", label: "отсутствует" }
     }[status?.type];
+    // Свой статус важнее: он выставлен руками именно для этой встречи.
+    const member = memberForName(name);
+    const mattermostIcon = statusDetails ? null : (member && VRMattermost.memberIcon(member));
+    const mattermostText = member ? VRMattermost.describe(member) : "";
 
-    button.classList.toggle("vrm-has-status", Boolean(statusDetails));
-    button.textContent = statusDetails?.icon || VRMeetups.initials(name);
-    button.title = statusDetails
-      ? `${name} — ${statusDescription(status)}. Нажмите, чтобы изменить статус`
-      : `${name} — установить статус`;
+    button.classList.toggle("vrm-has-status", Boolean(statusDetails || mattermostIcon));
+    button.classList.toggle("vrm-from-mattermost", Boolean(mattermostIcon));
+    button.textContent = statusDetails?.icon || mattermostIcon || VRMeetups.initials(name);
+    if (statusDetails) {
+      button.title = `${name} — ${statusDescription(status)}. Нажмите, чтобы изменить статус`;
+    } else if (mattermostText) {
+      button.title = `${name} — ${mattermostText} (Mattermost). Нажмите, чтобы задать свой статус`;
+    } else {
+      button.title = `${name} — установить статус`;
+    }
     button.setAttribute("aria-label", button.title);
     button.setAttribute("aria-pressed", statusDetails ? "true" : "false");
   }
@@ -495,8 +632,15 @@
     const rosterLabel = document.createElement("span");
     rosterLabel.className = "vrm-roster-name";
     rosterLabel.textContent = activeRoster.name;
-    rosterLabel.title = `Выбран список: ${activeRoster.name}`;
-    header.append(createCollapseButton(section), label, count, rosterLabel, createGearButton());
+    rosterLabel.title = VRMattermost.isMattermost(activeRoster)
+      ? `Список «${activeRoster.name}» — состав из канала Mattermost «${activeRoster.source.channelDisplayName || activeRoster.source.channelName}»`
+      : `Выбран список: ${activeRoster.name}`;
+
+    const actions = document.createElement("div");
+    actions.className = "vrm-header-actions";
+    if (VRMattermost.isMattermost(activeRoster)) actions.append(createMattermostButton());
+    actions.append(createGearButton());
+    header.append(createCollapseButton(section), label, count, rosterLabel, actions);
     section.append(delimiter, header);
 
     const body = document.createElement("div");
@@ -529,6 +673,17 @@
         person.textContent = name;
         person.title = `${name} — отсутствует`;
         row.append(avatar, person);
+
+        // Из Mattermost видно, человек вообще у компьютера или уже ушёл.
+        const member = memberForName(name);
+        if (member) {
+          const presence = VRMattermost.presence(member);
+          const badge = document.createElement("span");
+          badge.className = `vrm-presence vrm-presence-${presence.tone}`;
+          badge.textContent = presence.short;
+          badge.title = `${name} в Mattermost: ${VRMattermost.describe(member)}`;
+          row.append(badge);
+        }
         body.append(row);
       });
     }
@@ -592,6 +747,19 @@
     hint.className = "vrm-picker-hint";
     hint.textContent = "По одному человеку на строку. Можно дописать людей в текущий список.";
 
+    const sourceBox = document.createElement("div");
+    sourceBox.className = "vrm-picker-source";
+    const sourceText = document.createElement("span");
+    const sourceSync = document.createElement("button");
+    sourceSync.type = "button";
+    sourceSync.className = "vrm-picker-source-sync";
+    sourceSync.textContent = "Обновить";
+    const sourceDetach = document.createElement("button");
+    sourceDetach.type = "button";
+    sourceDetach.className = "vrm-picker-source-detach";
+    sourceDetach.textContent = "Отвязать";
+    sourceBox.append(sourceText, sourceSync, sourceDetach);
+
     const aliasesLabel = document.createElement("div");
     aliasesLabel.className = "vrm-picker-label vrm-picker-aliases-label";
     aliasesLabel.textContent = "Сохранённые псевдонимы";
@@ -600,6 +768,54 @@
 
     let draftId = null;
     let draftAliases = {};
+    let draftSource = null;
+
+    function renderSource() {
+      const linked = draftSource?.type === "mattermost";
+      sourceBox.hidden = !linked;
+      peopleInput.readOnly = linked;
+      peopleInput.classList.toggle("vrm-is-readonly", linked);
+      hint.textContent = linked
+        ? "Состав приходит из Mattermost и обновляется автоматически. Правки здесь не сохранятся."
+        : "По одному человеку на строку. Можно дописать людей в текущий список.";
+      if (linked) {
+        const channel = draftSource.channelDisplayName || draftSource.channelName;
+        sourceText.textContent = `Канал Mattermost: ${channel}`;
+        sourceText.title = `${draftSource.baseUrl} — ${channel}`;
+      }
+    }
+
+    sourceDetach.addEventListener("click", () => {
+      draftSource = null;
+      renderSource();
+      peopleInput.focus();
+    });
+
+    sourceSync.addEventListener("click", async () => {
+      if (!draftSource) return;
+      sourceSync.disabled = true;
+      sourceSync.textContent = "Обновляю…";
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "VRM_MM_SNAPSHOT",
+          source: draftSource,
+          force: true
+        });
+        if (!response?.ok) throw new Error(response?.message || "Не удалось получить данные из Mattermost.");
+        const merged = VRMattermost.applySnapshot({ aliases: draftAliases }, response.members);
+        peopleInput.value = merged.participants.join("\n");
+        draftAliases = merged.aliases;
+        draftSource = { ...draftSource, syncedAt: response.fetchedAt };
+        renderAliases();
+        sourceText.textContent = `Канал Mattermost: ${response.channel.displayName} — ${merged.participants.length} чел.`;
+      } catch (error) {
+        sourceText.textContent = error.message;
+      } finally {
+        sourceSync.disabled = false;
+        sourceSync.textContent = "Обновить";
+      }
+    });
+
     function fillSelect(selectedId) {
       select.replaceChildren();
       state.rosters.forEach((roster) => {
@@ -619,6 +835,8 @@
       draftAliases = Object.fromEntries(
         Object.entries(roster?.aliases || {}).map(([key, values]) => [key, [...values]])
       );
+      draftSource = roster?.source ? { ...roster.source } : null;
+      renderSource();
       renderAliases();
     }
 
@@ -701,6 +919,7 @@
       peopleLabel,
       peopleInput,
       hint,
+      sourceBox,
       aliasesLabel,
       aliasesList,
       settings,
@@ -751,12 +970,14 @@
         participants,
         statuses: existing?.statuses || {},
         aliases: draftAliases,
+        source: draftSource,
         createdAt: existing?.createdAt || Date.now(),
         updatedAt: Date.now()
       };
       if (existingIndex >= 0) state.rosters[existingIndex] = savedRoster;
       else state.rosters.push(savedRoster);
 
+      appliedSnapshotKey = "";
       state.selectedRosterId = savedRoster.id;
       state.highlightPresent = highlightCheckbox.checked;
       if (bindCheckbox.checked) state.roomAssignments[currentRoomKey()] = savedRoster.id;
@@ -783,6 +1004,8 @@
       }
 
       document.getElementById(MISSING_ID)?.remove();
+      // Состав из Mattermost подтягивается до сравнения: список мог измениться.
+      await refreshMattermost(false);
       const actualNames = await collectAllNames(panel.scroller);
       lastActualNames = actualNames;
       const actualNameKeys = new Set(actualNames.keys());
@@ -823,7 +1046,8 @@
   });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !["rosters", "roomAssignments", "selectedRosterId", "highlightPresent"].some((key) => changes[key])) return;
+    const watched = ["rosters", "roomAssignments", "selectedRosterId", "highlightPresent", "showMattermostStatuses"];
+    if (areaName !== "local" || !watched.some((key) => changes[key])) return;
     loadActiveRoster().then(() => {
       updatePresentMarkers();
       if (!activeRoster) {
@@ -854,5 +1078,6 @@
     updatePresentMarkers();
     if (activeRoster && findPanel()) scheduleAutoScan();
     scheduleMidnightRefresh();
+    scheduleMattermostRefresh();
   });
 })();

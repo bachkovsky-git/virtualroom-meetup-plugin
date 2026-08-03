@@ -1,13 +1,17 @@
 {
   "manifest_version": 3,
   "name": "VirtualRoom — контроль участников",
-  "version": "1.5.1",
-  "description": "Сравнивает список приглашённых со списком участников VirtualRoom и показывает тех, кто не пришёл.",
-  "permissions": ["storage", "activeTab"],
+  "version": "1.6.0",
+  "description": "Сравнивает список приглашённых со списком участников VirtualRoom и показывает тех, кто не пришёл. Состав и статусы можно брать из канала Mattermost.",
+  "permissions": ["storage", "activeTab", "cookies"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["common.js", "storage.js", "content.js"],
+      "js": ["common.js", "mattermost.js", "storage.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }
