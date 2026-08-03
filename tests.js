@@ -110,6 +110,28 @@ const byKey = VRMattermost.membersByKey(members);
 check("поиск по имени", byKey.get(VRMeetups.comparisonKey("Иван Иванов")).id, "u1");
 check("поиск по логину", byKey.get(VRMeetups.comparisonKey("lipanti.nick")).id, "u2");
 
+// --- mattermost.js: порядок каналов ----------------------------------------
+
+check("канал митапа приоритетен",
+  VRMattermost.isMeetupChannel({ name: "backend-meetups", displayName: "backend-meetups" }), true);
+check("канал встречи приоритетен",
+  VRMattermost.isMeetupChannel({ name: "vr2-backend-meeting", displayName: "vr2-backend-meeting" }), true);
+check("русское название тоже ловится",
+  VRMattermost.isMeetupChannel({ name: "abc123", displayName: "Митап по бэкенду" }), true);
+check("обычный канал не приоритетен",
+  VRMattermost.isMeetupChannel({ name: "vr2-issues", displayName: "vr2-issues" }), false);
+
+const channels = [
+  { name: "vr2-issues", displayName: "vr2-issues" },
+  { name: "vr2-backend-meeting", displayName: "vr2-backend-meeting" },
+  { name: "analysts-general", displayName: "analysts-general" },
+  { name: "backend-meetups", displayName: "backend-meetups" },
+  { name: "ai", displayName: "ai-ии-в мираполис" }
+];
+check("митапы и встречи идут первыми, внутри групп — по алфавиту",
+  [...channels].sort(VRMattermost.compareChannels).map((channel) => channel.displayName),
+  ["backend-meetups", "vr2-backend-meeting", "ai-ии-в мираполис", "analysts-general", "vr2-issues"]);
+
 // --- совместимость со сравнением участников --------------------------------
 
 const roster = { participants: applied.participants, aliases: applied.aliases };
