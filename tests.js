@@ -27,6 +27,27 @@ check("parseExpected убирает дубли и маркеры",
   VRMeetups.parseExpected("- Иван Иванов\nИванов Иван\n; Мария Петрова"),
   ["Иван Иванов", "Мария Петрова"]);
 check("инициалы", VRMeetups.initials("Иван Иванов"), "ИИ");
+
+// Отчество может быть указано только в одном из источников.
+check("отчество в комнате, в списке без него",
+  VRMeetups.namesMatch("Трегубов Максим", "Трегубов Максим Сергеевич"), true);
+check("отчество в списке, в комнате без него",
+  VRMeetups.namesMatch("Трегубов Максим Сергеевич", "Трегубов Максим"), true);
+check("порядок слов с отчеством не важен",
+  VRMeetups.namesMatch("Максим Сергеевич Трегубов", "Трегубов Максим"), true);
+check("однофамильцы с разными именами не путаются",
+  VRMeetups.namesMatch("Трегубов Максим Сергеевич", "Трегубов Игорь"), false);
+check("одной фамилии для совпадения мало",
+  VRMeetups.namesMatch("Трегубов", "Трегубов Максим Сергеевич"), false);
+check("разные люди не совпадают",
+  VRMeetups.namesMatch("Иванов Иван", "Петрова Мария"), false);
+check("пустое имя ни с чем не совпадает", VRMeetups.namesMatch("", "Иванов Иван"), false);
+
+const patronymicRoster = { participants: ["Трегубов Максим", "Иванов Иван"], aliases: {} };
+check("человек с отчеством в комнате считается пришедшим",
+  VRMeetups.participantIsPresent(patronymicRoster, "Трегубов Максим", ["Трегубов Максим Сергеевич"]), true);
+check("отсутствующий по-прежнему отсутствует",
+  VRMeetups.participantIsPresent(patronymicRoster, "Иванов Иван", ["Трегубов Максим Сергеевич"]), false);
 check("просроченный статус снимается",
   VRMeetups.normalizeStatus({ type: "vacation", from: "2026-07-01", until: "2026-07-02" }, "2026-07-03"), null);
 check("статус в периоде активен",
