@@ -67,7 +67,12 @@
   }
 
   function memberForName(name) {
-    return mmMembers.get(VRMeetups.comparisonKey(name)) || null;
+    const key = VRMeetups.comparisonKey(name);
+    if (mmMembers.has(key)) return mmMembers.get(key);
+    for (const [memberKey, member] of mmMembers) {
+      if (VRMeetups.namesMatch(memberKey, key)) return member;
+    }
+    return null;
   }
 
   // Состав канала — источник истины: участники и их ники переезжают в список.
@@ -190,9 +195,14 @@
 
   function expectedParticipantForActual(actualName) {
     const actualKey = VRMeetups.comparisonKey(actualName);
-    return activeRoster?.participants.find((expectedName) =>
-      VRMeetups.participantMatchKeys(activeRoster, expectedName).includes(actualKey)
-    ) || null;
+    const participants = activeRoster?.participants || [];
+    const keysFor = (expectedName) => VRMeetups.participantMatchKeys(activeRoster, expectedName);
+    // Точное совпадение проверяется первым: если в списке есть и «Иванов Иван»,
+    // и «Иванов Иван Петрович», строка достанется тому, кто записан так же.
+    return participants.find((expectedName) => keysFor(expectedName).includes(actualKey)) ||
+      participants.find((expectedName) =>
+        keysFor(expectedName).some((key) => VRMeetups.namesMatch(key, actualKey))
+      ) || null;
   }
 
   function updatePresentMarkers() {
@@ -480,7 +490,8 @@
   function availableAliasNames() {
     const claimedKeys = VRMeetups.rosterMatchKeys(activeRoster);
     return Array.from(lastActualNames.entries())
-      .filter(([nameKey]) => !claimedKeys.has(nameKey))
+      .filter(([nameKey]) => !claimedKeys.has(nameKey) &&
+        !Array.from(claimedKeys).some((key) => VRMeetups.namesMatch(key, nameKey)))
       .map(([, displayName]) => displayName);
   }
 

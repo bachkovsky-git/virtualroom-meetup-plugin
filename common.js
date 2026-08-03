@@ -81,11 +81,36 @@
     );
   }
 
+  function nameTokens(value) {
+    return comparisonKey(value).split(" ").filter(Boolean);
+  }
+
+  // Отчество бывает указано только в одном из источников: в комнате человек
+  // подписан «Сидоров Алексей Петрович», а в списке — «Сидоров Алексей».
+  // Считаем это одним человеком, если все слова короткого имени входят
+  // в длинное. Одного слова для такого вывода мало.
+  function namesMatch(first, second) {
+    const firstTokens = nameTokens(first);
+    const secondTokens = nameTokens(second);
+    if (!firstTokens.length || !secondTokens.length) return false;
+    if (firstTokens.join(" ") === secondTokens.join(" ")) return true;
+
+    const [shorter, longer] = firstTokens.length <= secondTokens.length
+      ? [firstTokens, secondTokens]
+      : [secondTokens, firstTokens];
+    if (shorter.length < 2) return false;
+    return shorter.every((token) => longer.includes(token));
+  }
+
   function participantIsPresent(roster, participantName, actualNameKeys) {
     const actualKeys = actualNameKeys instanceof Set
       ? actualNameKeys
       : new Set(Array.from(actualNameKeys || [], comparisonKey));
-    return participantMatchKeys(roster, participantName).some((key) => actualKeys.has(key));
+    const matchKeys = participantMatchKeys(roster, participantName);
+    if (matchKeys.some((key) => actualKeys.has(key))) return true;
+    return matchKeys.some((key) =>
+      Array.from(actualKeys).some((actualKey) => namesMatch(key, actualKey))
+    );
   }
 
   function localDateISO(date = new Date()) {
@@ -161,6 +186,8 @@
     rosterForRoom,
     participantMatchKeys,
     rosterMatchKeys,
+    nameTokens,
+    namesMatch,
     participantIsPresent,
     localDateISO,
     addLocalDays,
