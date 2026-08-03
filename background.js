@@ -96,7 +96,7 @@ async function fetchChannels(baseUrl, teamId) {
       displayName: channel.display_name || channel.name,
       private: channel.type === "P"
     }))
-    .sort((a, b) => a.displayName.localeCompare(b.displayName, "ru"));
+    .sort(VRMattermost.compareChannels);
 }
 
 async function fetchChannel(baseUrl, source) {

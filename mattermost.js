@@ -331,6 +331,21 @@
     };
   }
 
+  // К комнате VirtualRoom привязывают каналы митапов и встреч, поэтому в
+  // выпадающем списке они идут первыми — иначе нужный канал приходится
+  // искать среди полутора сотен остальных.
+  const MEETUP_PATTERN = /meetup|meeting|митап/i;
+
+  function isMeetupChannel(channel) {
+    return MEETUP_PATTERN.test(`${channel?.name || ""} ${channel?.displayName || ""}`);
+  }
+
+  function compareChannels(first, second) {
+    const byMeetup = Number(isMeetupChannel(second)) - Number(isMeetupChannel(first));
+    return byMeetup ||
+      String(first?.displayName || "").localeCompare(String(second?.displayName || ""), "ru");
+  }
+
   function sourceKey(source) {
     if (!source || source.type !== "mattermost") return "";
     return `${normalizeBaseUrl(source.baseUrl)}#${source.channelId || source.channelName || ""}`;
@@ -388,6 +403,8 @@
     describe,
     memberIcon,
     memberFromUser,
+    isMeetupChannel,
+    compareChannels,
     sourceKey,
     isMattermost,
     applySnapshot,
