@@ -27,6 +27,27 @@ check("parseExpected убирает дубли и маркеры",
   VRMeetups.parseExpected("- Иван Иванов\nИванов Иван\n; Мария Петрова"),
   ["Иван Иванов", "Мария Петрова"]);
 check("инициалы", VRMeetups.initials("Иван Иванов"), "ИИ");
+
+// Отчество может быть указано только в одном из источников.
+check("отчество в комнате, в списке без него",
+  VRMeetups.namesMatch("Сидоров Алексей", "Сидоров Алексей Петрович"), true);
+check("отчество в списке, в комнате без него",
+  VRMeetups.namesMatch("Сидоров Алексей Петрович", "Сидоров Алексей"), true);
+check("порядок слов с отчеством не важен",
+  VRMeetups.namesMatch("Алексей Петрович Сидоров", "Сидоров Алексей"), true);
+check("однофамильцы с разными именами не путаются",
+  VRMeetups.namesMatch("Сидоров Алексей Петрович", "Сидоров Игорь"), false);
+check("одной фамилии для совпадения мало",
+  VRMeetups.namesMatch("Сидоров", "Сидоров Алексей Петрович"), false);
+check("разные люди не совпадают",
+  VRMeetups.namesMatch("Иванов Иван", "Петрова Мария"), false);
+check("пустое имя ни с чем не совпадает", VRMeetups.namesMatch("", "Иванов Иван"), false);
+
+const patronymicRoster = { participants: ["Сидоров Алексей", "Иванов Иван"], aliases: {} };
+check("человек с отчеством в комнате считается пришедшим",
+  VRMeetups.participantIsPresent(patronymicRoster, "Сидоров Алексей", ["Сидоров Алексей Петрович"]), true);
+check("отсутствующий по-прежнему отсутствует",
+  VRMeetups.participantIsPresent(patronymicRoster, "Иванов Иван", ["Сидоров Алексей Петрович"]), false);
 check("просроченный статус снимается",
   VRMeetups.normalizeStatus({ type: "vacation", from: "2026-07-01", until: "2026-07-02" }, "2026-07-03"), null);
 check("статус в периоде активен",
