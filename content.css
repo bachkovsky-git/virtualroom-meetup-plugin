@@ -1,0 +1,481 @@
+#vrm-attendance-missing {
+  width: 100%;
+  color: #8e9ca0;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#vrm-attendance-missing .vrm-missing-delimiter {
+  height: 1px;
+  margin: 0 12px;
+  background: rgba(142, 156, 160, 0.28);
+}
+
+#vrm-attendance-missing .vrm-missing-header {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#vrm-attendance-missing .vrm-collapse-button {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  margin: 0 5px 0 -5px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  color: #8e9ca0;
+  background: transparent;
+  cursor: pointer;
+}
+
+#vrm-attendance-missing .vrm-collapse-button:hover { background: rgba(142, 156, 160, 0.18); }
+
+#vrm-attendance-missing .vrm-collapse-button svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  transition: transform 140ms ease;
+}
+
+#vrm-attendance-missing.vrm-is-collapsed .vrm-collapse-button svg { transform: rotate(-90deg); }
+#vrm-attendance-missing.vrm-is-collapsed .vrm-missing-body { display: none; }
+
+#vrm-attendance-missing .vrm-missing-count {
+  margin-left: 5px;
+  color: #748287;
+  font-variant-numeric: tabular-nums;
+}
+
+#vrm-attendance-missing .vrm-roster-name {
+  min-width: 0;
+  margin-left: 7px;
+  overflow: hidden;
+  color: #718087;
+  font-size: 10px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#vrm-attendance-missing .vrm-settings-button {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  margin-left: auto;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  color: #8e9ca0;
+  background: transparent;
+  cursor: pointer;
+}
+
+#vrm-attendance-missing .vrm-settings-button:hover {
+  color: #fff;
+  background: rgba(142, 156, 160, 0.22);
+}
+
+#vrm-attendance-missing .vrm-settings-button svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+#vrm-attendance-missing .vrm-missing-row {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 12px;
+  opacity: 0.72;
+  font-size: 13px;
+}
+
+#vrm-attendance-missing .vrm-missing-avatar {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  color: #f4f6f7;
+  background: #8e9ca0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+#vrm-attendance-missing .vrm-missing-avatar:hover,
+#vrm-attendance-missing .vrm-missing-avatar:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.48);
+  outline-offset: 1px;
+}
+
+#vrm-attendance-missing .vrm-missing-avatar.vrm-has-status {
+  font-size: 15px;
+  line-height: 1;
+}
+
+#vrm-attendance-missing .vrm-missing-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #8e9ca0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[class*="ParticipantItemContainer"][data-vrm-present-user="true"] {
+  position: relative;
+}
+
+.vrm-present-dot {
+  appearance: none;
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 2;
+  left: 2px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  border-radius: 50%;
+  padding: 0;
+  background: #20c979;
+  box-shadow: 0 0 0 2px rgba(32, 201, 121, 0.18);
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateY(-50%);
+}
+
+.vrm-present-dot:hover,
+.vrm-present-dot:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.65);
+  outline-offset: 1px;
+}
+
+#vrm-attendance-missing .vrm-all-present {
+  height: 32px;
+  padding: 8px 12px 8px 45px;
+  color: #6d8d7d;
+  font-size: 12px;
+}
+
+#vrm-roster-picker {
+  position: fixed;
+  z-index: 2147483647;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(9, 18, 22, 0.55);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#vrm-roster-picker .vrm-picker-dialog {
+  width: min(410px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  border: 1px solid rgba(142, 156, 160, 0.28);
+  border-radius: 12px;
+  padding: 18px;
+  color: #e9eef0;
+  background: #263238;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.38);
+}
+
+#vrm-roster-picker .vrm-picker-field-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#vrm-roster-picker .vrm-picker-field-grow { min-width: 0; flex: 1; }
+
+#vrm-roster-picker .vrm-picker-label {
+  display: block;
+  margin-bottom: 5px;
+  color: #cbd3d6;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#vrm-roster-picker .vrm-picker-title {
+  margin: 0 0 5px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+#vrm-roster-picker .vrm-picker-description {
+  margin: 0 0 14px;
+  color: #aab6ba;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#vrm-roster-picker select {
+  width: 100%;
+  height: 40px;
+  border: 1px solid #66767d;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #eef2f3;
+  background: #344249;
+  font: 13px inherit;
+  outline: none;
+}
+
+#vrm-roster-picker input[type="text"],
+#vrm-roster-picker textarea {
+  width: 100%;
+  border: 1px solid #66767d;
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: #eef2f3;
+  background: #344249;
+  font: 13px/1.4 inherit;
+  outline: none;
+}
+
+#vrm-roster-picker input[type="text"] { height: 40px; margin-bottom: 12px; }
+#vrm-roster-picker textarea { min-height: 145px; resize: vertical; }
+#vrm-roster-picker input[type="text"]:focus,
+#vrm-roster-picker textarea:focus { border-color: #35bd7d; }
+
+#vrm-roster-picker .vrm-picker-new {
+  flex: 0 0 auto;
+  color: #dce4e6;
+  background: #435158;
+}
+
+#vrm-roster-picker .vrm-picker-hint {
+  margin: 5px 0 0;
+  color: #92a1a7;
+  font-size: 10px;
+}
+
+#vrm-roster-picker .vrm-picker-aliases-label { margin-top: 12px; }
+
+#vrm-roster-picker .vrm-picker-aliases {
+  display: grid;
+  gap: 4px;
+  max-height: 110px;
+  overflow-y: auto;
+}
+
+#vrm-roster-picker .vrm-picker-alias-row {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 4px 5px 4px 9px;
+  color: #bdc8cc;
+  background: rgba(142, 156, 160, 0.11);
+  font-size: 11px;
+}
+
+#vrm-roster-picker .vrm-picker-alias-row span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#vrm-roster-picker .vrm-picker-alias-remove {
+  display: grid;
+  width: 24px;
+  min-height: 24px;
+  flex: 0 0 24px;
+  place-items: center;
+  padding: 0;
+  color: #d5dcdf;
+  background: transparent;
+  font-size: 17px;
+}
+
+#vrm-roster-picker .vrm-picker-alias-remove:hover { background: rgba(255, 255, 255, 0.1); }
+
+#vrm-roster-picker select:focus { border-color: #35bd7d; }
+
+#vrm-roster-picker .vrm-picker-bind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 11px 0 0;
+  color: #cbd3d6;
+  font-size: 12px;
+}
+
+#vrm-roster-picker .vrm-picker-settings { margin: 14px 0 16px; }
+
+#vrm-roster-picker .vrm-picker-bind input { accent-color: #20a66a; }
+
+#vrm-roster-picker .vrm-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+#vrm-roster-picker button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font: 700 12px inherit;
+}
+
+#vrm-roster-picker .vrm-picker-cancel { color: #d5dcdf; background: #435158; }
+#vrm-roster-picker .vrm-picker-apply { color: #fff; background: #20a66a; }
+
+#vrm-attendance-status-menu {
+  position: fixed;
+  z-index: 2147483647;
+  min-width: 190px;
+  max-width: min(290px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid rgba(142, 156, 160, 0.35);
+  border-radius: 9px;
+  padding: 5px;
+  color: #e9eef0;
+  background: #263238;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.38);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#vrm-attendance-status-menu .vrm-status-option {
+  display: flex;
+  width: 100%;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 9px;
+  color: #e9eef0;
+  background: transparent;
+  cursor: pointer;
+  font: 12px/1.25 inherit;
+  text-align: left;
+}
+
+#vrm-attendance-status-menu .vrm-status-option span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#vrm-attendance-status-menu .vrm-status-period {
+  min-width: auto;
+  flex: 0 0 auto;
+  margin-left: auto;
+  overflow: visible;
+  color: #94a4aa;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: clip;
+}
+
+#vrm-attendance-status-menu .vrm-status-option:hover,
+#vrm-attendance-status-menu .vrm-status-option[aria-checked="true"] {
+  background: rgba(142, 156, 160, 0.2);
+}
+
+#vrm-attendance-status-menu .vrm-status-icon {
+  width: 20px;
+  flex: 0 0 20px;
+  font-size: 16px;
+  text-align: center;
+}
+
+#vrm-attendance-status-menu .vrm-status-separator {
+  height: 1px;
+  margin: 5px 4px;
+  background: rgba(142, 156, 160, 0.25);
+}
+
+#vrm-attendance-status-menu .vrm-status-heading {
+  max-width: 260px;
+  padding: 7px 9px 9px;
+  color: #cbd3d6;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+#vrm-attendance-status-menu .vrm-status-empty {
+  max-width: 260px;
+  padding: 7px 9px 10px;
+  color: #92a1a7;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+#vrm-attendance-status-menu .vrm-status-range {
+  padding: 5px 7px 7px;
+}
+
+#vrm-attendance-status-menu .vrm-status-range-title {
+  margin-bottom: 6px;
+  color: #cbd3d6;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+#vrm-attendance-status-menu .vrm-status-range-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+#vrm-attendance-status-menu .vrm-status-date-field span {
+  display: block;
+  margin-bottom: 3px;
+  color: #92a1a7;
+  font-size: 9px;
+}
+
+#vrm-attendance-status-menu .vrm-status-range input {
+  min-width: 0;
+  height: 34px;
+  border: 1px solid #66767d;
+  border-radius: 6px;
+  padding: 0 5px;
+  color: #eef2f3;
+  color-scheme: dark;
+  background: #344249;
+  font: 10px inherit;
+}
+
+#vrm-attendance-status-menu .vrm-status-range-apply {
+  width: 100%;
+  min-height: 32px;
+  margin-top: 7px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: #fff;
+  background: #20a66a;
+  cursor: pointer;
+  font: 700 11px inherit;
+}
