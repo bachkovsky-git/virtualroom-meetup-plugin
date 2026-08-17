@@ -24,6 +24,7 @@
   let autoScanTimer = null;
   let ignoreMutationsUntil = 0;
   let statusMenuOutsideHandler = null;
+  let statusMenuAnchor = null;
   let lastActualNames = new Map();
   let midnightRefreshTimer = null;
   let mattermostRefreshTimer = null;
@@ -360,6 +361,14 @@
   }
 
   // Меню выбора списка: одинаково открывается из шапки блока и из приглашения.
+  function toggleRosterMenu(anchor) {
+    if (statusMenuAnchor === anchor) {
+      closeStatusMenu();
+      return;
+    }
+    showRosterMenu(anchor);
+  }
+
   function showRosterMenu(anchor) {
     closeStatusMenu();
     const menu = document.createElement("div");
@@ -386,12 +395,7 @@
       icon.textContent = chosen ? "●" : "";
       const label = document.createElement("span");
       label.textContent = roster.name;
-      const count = document.createElement("span");
-      count.className = "vrm-status-period";
-      count.textContent = `${roster.participants.length}`;
-      count.title = `${roster.participants.length} чел. в списке`;
-
-      item.append(icon, label, count);
+      item.append(icon, label);
       item.addEventListener("click", () => chooseRoster(roster.id));
       menu.append(item);
     });
@@ -430,7 +434,7 @@
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      showRosterMenu(button);
+      toggleRosterMenu(button);
     });
     return button;
   }
@@ -561,6 +565,7 @@
 
   function closeStatusMenu() {
     document.getElementById(STATUS_MENU_ID)?.remove();
+    statusMenuAnchor = null;
     if (statusMenuOutsideHandler) {
       document.removeEventListener("pointerdown", statusMenuOutsideHandler, true);
       statusMenuOutsideHandler = null;
@@ -675,6 +680,7 @@
 
   function placeStatusMenu(menu, anchor, focusSelector) {
     document.documentElement.append(menu);
+    statusMenuAnchor = anchor;
     const anchorRect = anchor.getBoundingClientRect();
     const menuRect = menu.getBoundingClientRect();
     const left = Math.max(8, Math.min(anchorRect.left, window.innerWidth - menuRect.width - 8));
@@ -878,7 +884,7 @@
       action.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        showRosterMenu(action);
+        toggleRosterMenu(action);
       });
     } else {
       action.textContent = "Создать список";

@@ -106,18 +106,21 @@
 /* Название списка — кнопка: по ней открывается выбор списка встречи. */
 #vrm-attendance-missing .vrm-roster-switch {
   flex: 0 1 auto;
-  border: 0;
+  border: 0 !important;
   border-radius: 5px;
-  padding: 2px 5px;
-  background: transparent;
-  cursor: pointer;
-  font-family: inherit;
+  padding: 2px 5px !important;
+  color: #718087 !important;
+  -webkit-text-fill-color: #718087 !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  font: 500 10px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
 }
 
 #vrm-attendance-missing .vrm-roster-switch:hover,
 #vrm-attendance-missing .vrm-roster-switch:focus-visible {
-  color: #dfe6e8;
-  background: rgba(142, 156, 160, 0.18);
+  color: #dfe6e8 !important;
+  -webkit-text-fill-color: #dfe6e8 !important;
+  background: rgba(142, 156, 160, 0.18) !important;
 }
 
 #vrm-attendance-missing.vrm-is-prompt .vrm-missing-header { color: #b9c4c8; }
@@ -134,23 +137,30 @@
 }
 
 #vrm-attendance-missing .vrm-prompt-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: block;
 }
 
+/* Собственные стили VirtualRoom перебивают наши для button, из-за чего кнопка
+   выглядела серой с нечитаемым текстом, — поэтому важное помечено !important. */
 #vrm-attendance-missing .vrm-prompt-button {
-  min-height: 30px;
-  border: 0;
-  border-radius: 7px;
-  padding: 6px 11px;
-  color: #fff;
-  background: #20a66a;
-  cursor: pointer;
-  font: 700 12px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  display: block;
+  box-sizing: border-box;
+  width: 100% !important;
+  min-height: 32px !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  padding: 7px 11px !important;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  background: #20a66a !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+  font: 700 12px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  text-align: center;
+  text-shadow: none !important;
 }
 
-#vrm-attendance-missing .vrm-prompt-button:hover { background: #178b58; }
+#vrm-attendance-missing .vrm-prompt-button:hover { background: #178b58 !important; }
 
 #vrm-attendance-missing .vrm-prompt-button:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.65);
