@@ -946,19 +946,15 @@
     const count = document.createElement("span");
     count.className = "vrm-missing-count";
     count.textContent = `${rows.length}/${total}`;
-    // Значок кручения показывается, пока данные из прошлой проверки: сам блок
-    // при этом не прячется.
-    const refreshing = document.createElement("span");
-    refreshing.className = "vrm-refreshing";
-    refreshing.textContent = "⟳";
-    refreshing.title = "Показаны данные прошлой проверки, идёт обновление";
+    // Отдельного значка обновления в шапке нет: пока идёт проверка, крутится
+    // сама кнопка обновления слева от шестерёнки.
     const rosterLabel = createRosterButton();
 
     const actions = document.createElement("div");
     actions.className = "vrm-header-actions";
     if (VRMattermost.isMattermost(activeRoster)) actions.append(createMattermostButton());
     actions.append(createGearButton());
-    header.append(createCollapseButton(section), label, count, refreshing, rosterLabel, actions);
+    header.append(createCollapseButton(section), label, count, rosterLabel, actions);
     section.append(header);
 
     const body = document.createElement("div");

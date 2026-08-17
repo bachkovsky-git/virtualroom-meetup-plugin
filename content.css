@@ -68,28 +68,28 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Пока показаны данные прошлой проверки, блок остаётся на месте — рядом со
-   счётчиком крутится значок обновления. */
-#vrm-attendance-missing .vrm-refreshing {
-  display: none;
-  margin-left: 5px;
-  color: #748287;
-  font-size: 11px;
-  line-height: 1;
+/* Пока идёт обновление, ничего нового в шапке не появляется — крутится сама
+   кнопка обновления. Оборот с разгоном и торможением выглядит спокойнее
+   равномерного вращения. */
+#vrm-attendance-missing.vrm-is-stale .vrm-mattermost-button svg,
+#vrm-attendance-missing.vrm-is-refreshing .vrm-mattermost-button svg {
+  animation: vrm-spin 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
+  transform-origin: 50% 50%;
 }
 
-#vrm-attendance-missing.vrm-is-stale .vrm-refreshing,
-#vrm-attendance-missing.vrm-is-refreshing .vrm-refreshing {
-  display: inline-block;
-  animation: vrm-spin 1.1s linear infinite;
+#vrm-attendance-missing.vrm-is-stale .vrm-mattermost-button,
+#vrm-attendance-missing.vrm-is-refreshing .vrm-mattermost-button {
+  color: #35bd7d;
 }
 
 @keyframes vrm-spin {
-  to { transform: rotate(360deg); }
+  0% { transform: rotate(0deg); }
+  60% { transform: rotate(360deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #vrm-attendance-missing .vrm-refreshing { animation: none; }
+  #vrm-attendance-missing .vrm-mattermost-button svg { animation: none; }
 }
 
 #vrm-attendance-missing .vrm-roster-name {
