@@ -103,6 +103,60 @@
   white-space: nowrap;
 }
 
+/* Название списка — кнопка: по ней открывается выбор списка встречи. */
+#vrm-attendance-missing .vrm-roster-switch {
+  flex: 0 1 auto;
+  border: 0;
+  border-radius: 5px;
+  padding: 2px 5px;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+#vrm-attendance-missing .vrm-roster-switch:hover,
+#vrm-attendance-missing .vrm-roster-switch:focus-visible {
+  color: #dfe6e8;
+  background: rgba(142, 156, 160, 0.18);
+}
+
+#vrm-attendance-missing.vrm-is-prompt .vrm-missing-header { color: #b9c4c8; }
+
+#vrm-attendance-missing .vrm-prompt-body {
+  padding: 0 12px 10px;
+}
+
+#vrm-attendance-missing .vrm-prompt-text {
+  margin: 0 0 8px;
+  color: #8e9ca0;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#vrm-attendance-missing .vrm-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#vrm-attendance-missing .vrm-prompt-button {
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 11px;
+  color: #dce4e6;
+  background: rgba(142, 156, 160, 0.22);
+  cursor: pointer;
+  font: 700 12px inherit;
+}
+
+#vrm-attendance-missing .vrm-prompt-choose {
+  color: #fff;
+  background: #20a66a;
+}
+
+#vrm-attendance-missing .vrm-prompt-button:hover { filter: brightness(1.08); }
+
 #vrm-attendance-missing .vrm-header-actions {
   display: flex;
   align-items: center;

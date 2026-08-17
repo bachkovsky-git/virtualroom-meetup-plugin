@@ -4,6 +4,7 @@
   const STATE_KEYS = [
     "rosters",
     "roomAssignments",
+    "titleAssignments",
     "selectedRosterId",
     "highlightPresent",
     "missingCollapsed",
@@ -36,6 +37,14 @@
       channelDisplayName: String(source.channelDisplayName || channelName).trim(),
       syncedAt: Number(source.syncedAt) || 0
     };
+  }
+
+  // Привязки встреч: и по адресу комнаты, и по её названию. Записи на
+  // удалённые списки отбрасываются.
+  function onlyValid(assignments, validIds) {
+    return Object.fromEntries(
+      Object.entries(assignments || {}).filter(([key, rosterId]) => key && validIds.has(rosterId))
+    );
   }
 
   function cleanRoster(roster) {
@@ -109,9 +118,8 @@
     }
 
     const validIds = new Set(rosters.map((roster) => roster.id));
-    const roomAssignments = Object.fromEntries(
-      Object.entries(stored.roomAssignments || {}).filter(([, rosterId]) => validIds.has(rosterId))
-    );
+    const roomAssignments = onlyValid(stored.roomAssignments, validIds);
+    const titleAssignments = onlyValid(stored.titleAssignments, validIds);
     const selectedRosterId = validIds.has(stored.selectedRosterId)
       ? stored.selectedRosterId
       : (rosters[0]?.id || null);
@@ -119,6 +127,7 @@
     const state = {
       rosters,
       roomAssignments,
+      titleAssignments,
       selectedRosterId,
       highlightPresent: stored.highlightPresent !== false,
       missingCollapsed: stored.missingCollapsed === true,
@@ -135,13 +144,13 @@
     const rosters = (state.rosters || []).map(cleanRoster).filter(Boolean);
     const selected = VRMeetups.rosterById(rosters, state.selectedRosterId) || rosters[0] || null;
     const validIds = new Set(rosters.map((roster) => roster.id));
-    const roomAssignments = Object.fromEntries(
-      Object.entries(state.roomAssignments || {}).filter(([, rosterId]) => validIds.has(rosterId))
-    );
+    const roomAssignments = onlyValid(state.roomAssignments, validIds);
+    const titleAssignments = onlyValid(state.titleAssignments, validIds);
 
     const cleanState = {
       rosters,
       roomAssignments,
+      titleAssignments,
       selectedRosterId: selected?.id || null,
       highlightPresent: state.highlightPresent !== false,
       missingCollapsed: state.missingCollapsed === true,

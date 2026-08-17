@@ -111,6 +111,8 @@ textarea {
 }
 
 .room-binding input { margin: 1px 0 0; accent-color: #20a66a; }
+.roster-summary { margin: -8px 0 13px; }
+
 .room-label {
   margin: 5px 0 13px 22px;
   overflow: hidden;

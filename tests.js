@@ -85,6 +85,34 @@ check("свернули раздел — отпечаток другой",
   VRMeetups.missingSignature(rowsA, { ...extrasA, collapsed: true }) === VRMeetups.missingSignature(rowsA, extrasA),
   false);
 
+// --- common.js: привязка списка к встрече ------------------------------------
+
+check("счётчик непрочитанного отбрасывается",
+  VRMeetups.roomTitleKey("(3) ELEM Daily — VirtualRoom"), "elem daily");
+check("хвост приложения отрезается",
+  VRMeetups.roomTitleKey("Бэкенд-митап | VirtualRoom"), "бэкенд-митап");
+check("лишние пробелы схлопываются",
+  VRMeetups.roomTitleKey("  VR2   релиз  "), "vr2 релиз");
+check("слишком короткое название не годится", VRMeetups.roomTitleKey("VR"), "");
+check("пустой заголовок не годится", VRMeetups.roomTitleKey(""), "");
+
+const bindState = {
+  rosters: [{ id: "r1", name: "ELEM Daily" }, { id: "r2", name: "VR2 релиз" }],
+  roomAssignments: { "https://vr.example.com/room/7": "r1" },
+  titleAssignments: { "vr2 релиз": "r2" },
+  selectedRosterId: "r2"
+};
+check("привязка по адресу комнаты",
+  VRMeetups.assignedRoster(bindState, "https://vr.example.com/room/7", "vr2 релиз")?.id, "r1");
+check("адрес важнее названия",
+  VRMeetups.assignedRoster(bindState, "https://vr.example.com/room/7", "vr2 релиз")?.id, "r1");
+check("запасной ключ по названию встречи",
+  VRMeetups.assignedRoster(bindState, "https://vr.example.com/room/99", "vr2 релиз")?.id, "r2");
+check("нет привязки — нет списка",
+  VRMeetups.assignedRoster(bindState, "https://vr.example.com/room/99", "другая встреча"), null);
+check("в окне расширения запасной вариант остаётся",
+  VRMeetups.rosterForRoom(bindState, "https://vr.example.com/room/99", "другая встреча")?.id, "r2");
+
 // --- common.js: кеш последнего результата -----------------------------------
 
 check("ключ кеша из комнаты и списка",
