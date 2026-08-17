@@ -14,6 +14,7 @@
   let state = {
     rosters: [],
     roomAssignments: {},
+    titleAssignments: {},
     selectedRosterId: null,
     highlightPresent: true,
     missingCollapsed: false
@@ -42,11 +43,40 @@
     return VRMeetups.roomKey(location.href);
   }
 
+  function currentTitleKey() {
+    return VRMeetups.roomTitleKey(document.title);
+  }
+
+  // В комнате берётся только тот список, который к ней привязан: если привязки
+  // нет, вместо чужого списка показывается приглашение выбрать свой.
   async function loadActiveRoster(preferredRosterId) {
     state = await VRMStorage.load();
     activeRoster = VRMeetups.rosterById(state.rosters, preferredRosterId) ||
-      VRMeetups.rosterForRoom(state, currentRoomKey());
+      VRMeetups.assignedRoster(state, currentRoomKey(), currentTitleKey());
     return activeRoster;
+  }
+
+  // Выбор списка на встрече и есть «запомнить»: пишем обе привязки сразу.
+  async function bindRosterToRoom(rosterId) {
+    const roster = VRMeetups.rosterById(state.rosters, rosterId);
+    if (!roster) return null;
+
+    state.roomAssignments = { ...state.roomAssignments, [currentRoomKey()]: roster.id };
+    const titleKey = currentTitleKey();
+    if (titleKey) state.titleAssignments = { ...state.titleAssignments, [titleKey]: roster.id };
+    state.selectedRosterId = roster.id;
+
+    ignoreMutationsUntil = Date.now() + 1000;
+    state = await VRMStorage.save(state);
+    activeRoster = VRMeetups.rosterById(state.rosters, roster.id);
+    appliedSnapshotKey = "";
+    return activeRoster;
+  }
+
+  async function chooseRoster(rosterId) {
+    closeStatusMenu();
+    if (!(await bindRosterToRoom(rosterId))) return;
+    await scanParticipants(activeRoster.id);
   }
 
   function scheduleMidnightRefresh() {
@@ -190,7 +220,11 @@
   // Рисуем его сразу из прошлого результата, а свежий приедет фоном.
   function showRememberedResult() {
     const panel = findPanel();
-    if (!panel || !activeRoster) return false;
+    if (!panel) return false;
+    if (!activeRoster) {
+      renderPrompt(panel);
+      return true;
+    }
     const existing = document.getElementById(MISSING_ID);
     if (existing && existing.parentElement === panel.listContainer) return false;
 
@@ -323,6 +357,82 @@
       });
       participantRow.append(dot);
     });
+  }
+
+  // Меню выбора списка: одинаково открывается из шапки блока и из приглашения.
+  function showRosterMenu(anchor) {
+    closeStatusMenu();
+    const menu = document.createElement("div");
+    menu.id = STATUS_MENU_ID;
+    menu.setAttribute("data-vrm-extension", "true");
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Список для этой встречи");
+
+    const heading = document.createElement("div");
+    heading.className = "vrm-status-heading";
+    heading.textContent = "Список для этой встречи";
+    menu.append(heading);
+
+    state.rosters.forEach((roster) => {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "vrm-status-option vrm-roster-option";
+      item.setAttribute("role", "menuitemradio");
+      const chosen = roster.id === activeRoster?.id;
+      item.setAttribute("aria-checked", String(chosen));
+
+      const icon = document.createElement("span");
+      icon.className = "vrm-status-icon";
+      icon.textContent = chosen ? "●" : "";
+      const label = document.createElement("span");
+      label.textContent = roster.name;
+      const count = document.createElement("span");
+      count.className = "vrm-status-period";
+      count.textContent = `${roster.participants.length}`;
+      count.title = `${roster.participants.length} чел. в списке`;
+
+      item.append(icon, label, count);
+      item.addEventListener("click", () => chooseRoster(roster.id));
+      menu.append(item);
+    });
+
+    const separator = document.createElement("div");
+    separator.className = "vrm-status-separator";
+    const create = document.createElement("button");
+    create.type = "button";
+    create.className = "vrm-status-option vrm-roster-option";
+    create.setAttribute("role", "menuitem");
+    const createIcon = document.createElement("span");
+    createIcon.className = "vrm-status-icon";
+    createIcon.textContent = "+";
+    const createLabel = document.createElement("span");
+    createLabel.textContent = "Создать новый";
+    create.append(createIcon, createLabel);
+    create.addEventListener("click", () => {
+      closeStatusMenu();
+      showRosterPicker({ blank: true });
+    });
+    menu.append(separator, create);
+
+    placeStatusMenu(menu, anchor, '[aria-checked="true"], .vrm-roster-option');
+  }
+
+  function createRosterButton() {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "vrm-roster-name vrm-roster-switch";
+    button.textContent = `${activeRoster.name} ▾`;
+    button.title = VRMattermost.isMattermost(activeRoster)
+      ? `Список «${activeRoster.name}» — состав из канала Mattermost «${activeRoster.source.channelDisplayName || activeRoster.source.channelName}». Нажмите, чтобы сменить список`
+      : `Список «${activeRoster.name}». Нажмите, чтобы сменить список`;
+    button.setAttribute("aria-label", button.title);
+    button.setAttribute("aria-haspopup", "menu");
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showRosterMenu(button);
+    });
+    return button;
   }
 
   function createGearButton() {
@@ -720,6 +830,76 @@
     placeStatusMenu(menu, anchor, '[aria-checked="true"]');
   }
 
+  // Для этой встречи список ещё не выбран: вместо чужих данных показываем,
+  // что выбрать, прямо в панели участников.
+  function renderPrompt(panel) {
+    const signature = VRMeetups.missingSignature([], {
+      prompt: "1",
+      rosters: state.rosters.length
+    });
+    const existing = document.getElementById(MISSING_ID);
+    if (existing && existing.parentElement === panel.listContainer && signature === lastRenderSignature) return;
+    lastRenderSignature = signature;
+
+    closeStatusMenu();
+    existing?.remove();
+
+    const section = document.createElement("section");
+    section.id = MISSING_ID;
+    section.className = "vrm-is-prompt";
+    section.setAttribute("data-vrm-extension", "true");
+
+    const header = document.createElement("div");
+    header.className = "vrm-missing-header";
+    const label = document.createElement("span");
+    label.textContent = "Список не выбран";
+    const actions = document.createElement("div");
+    actions.className = "vrm-header-actions";
+    actions.append(createGearButton());
+    header.append(label, actions);
+
+    const body = document.createElement("div");
+    body.className = "vrm-missing-body vrm-prompt-body";
+    const text = document.createElement("p");
+    text.className = "vrm-prompt-text";
+    text.textContent = state.rosters.length
+      ? "Выберите, кого ждём на этой встрече — список запомнится для неё."
+      : "Создайте список тех, кого ждём на этой встрече.";
+    const buttons = document.createElement("div");
+    buttons.className = "vrm-prompt-actions";
+
+    if (state.rosters.length) {
+      const choose = document.createElement("button");
+      choose.type = "button";
+      choose.className = "vrm-prompt-button vrm-prompt-choose";
+      choose.textContent = "Выбрать список ▾";
+      choose.setAttribute("aria-haspopup", "menu");
+      choose.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showRosterMenu(choose);
+      });
+      buttons.append(choose);
+    }
+
+    const create = document.createElement("button");
+    create.type = "button";
+    create.className = "vrm-prompt-button";
+    create.textContent = "+ Создать новый";
+    create.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showRosterPicker({ blank: true });
+    });
+    buttons.append(create);
+
+    body.append(text, buttons);
+    const delimiter = document.createElement("div");
+    delimiter.className = "vrm-missing-delimiter";
+    section.append(header, body, delimiter);
+    panel.listContainer.insertBefore(section, panel.scroller);
+  }
+
   // rows — готовые «снимки» строк: свежие после проверки или взятые из кеша,
   // когда панель только что открылась и проверка ещё идёт.
   function renderResult(panel, rows, { expected, stale = false } = {}) {
@@ -769,12 +949,7 @@
     refreshing.className = "vrm-refreshing";
     refreshing.textContent = "⟳";
     refreshing.title = "Показаны данные прошлой проверки, идёт обновление";
-    const rosterLabel = document.createElement("span");
-    rosterLabel.className = "vrm-roster-name";
-    rosterLabel.textContent = activeRoster.name;
-    rosterLabel.title = VRMattermost.isMattermost(activeRoster)
-      ? `Список «${activeRoster.name}» — состав из канала Mattermost «${activeRoster.source.channelDisplayName || activeRoster.source.channelName}»`
-      : `Выбран список: ${activeRoster.name}`;
+    const rosterLabel = createRosterButton();
 
     const actions = document.createElement("div");
     actions.className = "vrm-header-actions";
@@ -841,7 +1016,7 @@
     document.getElementById(PICKER_ID)?.remove();
   }
 
-  function showRosterPicker() {
+  function showRosterPicker({ blank = false } = {}) {
     closeRosterPicker();
     const overlay = document.createElement("div");
     overlay.id = PICKER_ID;
@@ -966,7 +1141,7 @@
       state.rosters.forEach((roster) => {
         const option = document.createElement("option");
         option.value = roster.id;
-        option.textContent = `${roster.name} (${roster.participants.length})`;
+        option.textContent = roster.name;
         select.append(option);
       });
       select.disabled = !state.rosters.length;
@@ -1020,17 +1195,10 @@
       });
     }
 
-    fillSelect(activeRoster?.id);
-    editRoster(activeRoster);
+    fillSelect(blank ? null : activeRoster?.id);
+    editRoster(blank ? null : activeRoster);
+    if (blank) select.selectedIndex = -1;
 
-    const binding = document.createElement("label");
-    binding.className = "vrm-picker-bind";
-    const bindCheckbox = document.createElement("input");
-    bindCheckbox.type = "checkbox";
-    bindCheckbox.checked = Boolean(activeRoster && state.roomAssignments[currentRoomKey()] === activeRoster.id);
-    const bindingText = document.createElement("span");
-    bindingText.textContent = "Запомнить выбор для этой комнаты";
-    binding.append(bindCheckbox, bindingText);
 
     const highlight = document.createElement("label");
     highlight.className = "vrm-picker-bind";
@@ -1042,7 +1210,7 @@
     highlight.append(highlightCheckbox, highlightText);
     const settings = document.createElement("div");
     settings.className = "vrm-picker-settings";
-    settings.append(binding, highlight);
+    settings.append(highlight);
 
     const actions = document.createElement("div");
     actions.className = "vrm-picker-actions";
@@ -1080,12 +1248,10 @@
     select.addEventListener("change", () => {
       const selected = VRMeetups.rosterById(state.rosters, select.value);
       editRoster(selected);
-      bindCheckbox.checked = Boolean(selected && state.roomAssignments[currentRoomKey()] === selected.id);
     });
     newButton.addEventListener("click", () => {
       select.selectedIndex = -1;
       editRoster(null);
-      bindCheckbox.checked = true;
       nameInput.focus();
     });
     peopleInput.addEventListener("input", renderAliases);
@@ -1125,8 +1291,9 @@
       appliedSnapshotKey = "";
       state.selectedRosterId = savedRoster.id;
       state.highlightPresent = highlightCheckbox.checked;
-      if (bindCheckbox.checked) state.roomAssignments[currentRoomKey()] = savedRoster.id;
-      else delete state.roomAssignments[currentRoomKey()];
+      state.roomAssignments = { ...state.roomAssignments, [currentRoomKey()]: savedRoster.id };
+      const titleKey = currentTitleKey();
+      if (titleKey) state.titleAssignments = { ...state.titleAssignments, [titleKey]: savedRoster.id };
       state = await VRMStorage.save(state);
       activeRoster = savedRoster;
       closeRosterPicker();
@@ -1139,13 +1306,18 @@
     scanning = true;
     try {
       await loadActiveRoster(preferredRosterId);
-      if (!activeRoster) {
-        return { ok: false, message: "Сначала создайте список ожидаемых участников в расширении." };
-      }
-
       const panel = findPanel();
       if (!panel) {
         return { ok: false, message: "Откройте панель «Участники» в VirtualRoom и повторите проверку." };
+      }
+      if (!activeRoster) {
+        renderPrompt(panel);
+        return {
+          ok: false,
+          message: state.rosters.length
+            ? "Выберите список для этой встречи — в панели участников или здесь."
+            : "Создайте список ожидаемых участников."
+        };
       }
 
       // Пока идёт проверка, показанный блок остаётся на месте и лишь помечается
@@ -1217,23 +1389,38 @@
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message?.type !== "VRM_SCAN_PARTICIPANTS") return undefined;
-    scanParticipants(message.rosterId)
-      .then(sendResponse)
-      .catch((error) => sendResponse({ ok: false, message: error.message }));
-    return true;
+    if (message?.type === "VRM_SCAN_PARTICIPANTS") {
+      scanParticipants(message.rosterId)
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, message: error.message }));
+      return true;
+    }
+    // Список, выбранный или созданный в окне расширения, сразу становится
+    // списком этой встречи — но только если страница и правда комната.
+    if (message?.type === "VRM_BIND_ROSTER") {
+      loadActiveRoster()
+        .then(async () => {
+          if (!findPanel()) return { ok: false, message: "Панель участников не открыта." };
+          if (!(await bindRosterToRoom(message.rosterId))) {
+            return { ok: false, message: "Список не найден." };
+          }
+          return scanParticipants(activeRoster.id);
+        })
+        .then(sendResponse)
+        .catch((error) => sendResponse({ ok: false, message: error.message }));
+      return true;
+    }
+    return undefined;
   });
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    const watched = ["rosters", "roomAssignments", "selectedRosterId", "highlightPresent", "showMattermostStatuses"];
+    const watched = ["rosters", "roomAssignments", "titleAssignments", "selectedRosterId", "highlightPresent", "showMattermostStatuses"];
     if (areaName !== "local" || !watched.some((key) => changes[key])) return;
     loadActiveRoster().then(() => {
       updatePresentMarkers();
-      if (!activeRoster) {
-        document.getElementById(MISSING_ID)?.remove();
-      } else {
-        scheduleAutoScan();
-      }
+      // Без привязки на месте блока остаётся приглашение выбрать список.
+      if (!activeRoster) showRememberedResult();
+      else scheduleAutoScan();
     });
   });
 

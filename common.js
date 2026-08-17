@@ -61,9 +61,29 @@
     return (rosters || []).find((roster) => roster.id === id) || null;
   }
 
-  function rosterForRoom(state, key) {
-    const assignedId = state.roomAssignments?.[key];
-    return rosterById(state.rosters, assignedId) ||
+  // Запасной ключ встречи: у части систем адрес комнаты каждый раз новый,
+  // и тогда привязку спасает название из заголовка вкладки. Счётчик
+  // непрочитанного и хвост с названием приложения отбрасываются.
+  function roomTitleKey(title) {
+    const cleaned = String(title || "")
+      .replace(/^\s*\(\d+\)\s*/, "")
+      .split(/\s+[—–|]\s+/)[0]
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLocaleLowerCase("ru-RU");
+    return cleaned.length >= 3 ? cleaned : "";
+  }
+
+  // Строгий поиск: только то, что пользователь сам привязал к этой встрече.
+  // Ничего не найдено — значит, список нужно предложить выбрать.
+  function assignedRoster(state, key, titleKey) {
+    return rosterById(state.rosters, state.roomAssignments?.[key]) ||
+      (titleKey ? rosterById(state.rosters, state.titleAssignments?.[titleKey]) : null) ||
+      null;
+  }
+
+  function rosterForRoom(state, key, titleKey) {
+    return assignedRoster(state, key, titleKey) ||
       rosterById(state.rosters, state.selectedRosterId) ||
       state.rosters?.[0] ||
       null;
@@ -225,6 +245,8 @@
     initials,
     roomKey,
     rosterById,
+    roomTitleKey,
+    assignedRoster,
     rosterForRoom,
     participantMatchKeys,
     rosterMatchKeys,
