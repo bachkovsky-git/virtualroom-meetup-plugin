@@ -11,6 +11,8 @@
   const addParticipantButton = document.getElementById("add-participant");
   const roomLabel = document.getElementById("room-label");
   const rosterSummary = document.getElementById("roster-summary");
+  const aliasesBlock = document.getElementById("aliases-block");
+  const aliasesList = document.getElementById("aliases-list");
   const highlightPresent = document.getElementById("highlight-present");
   const newButton = document.getElementById("new-roster");
   const deleteButton = document.getElementById("delete-roster");
@@ -53,6 +55,9 @@
   // Выбор канала не выбрасывается при уходе в ручной режим: пользователь
   // может передумать, и возвращаться к пустым спискам неприятно.
   let stashedSource = null;
+  // Единый источник псевдонимов в панели: и подробный редактор, и блок
+  // «Сохранённые псевдонимы» правят эту карту.
+  let draftAliases = {};
   let mmListsReady = false;
 
   function showStatus(message, kind) {
@@ -129,6 +134,7 @@
     }
 
     applyEditorMode();
+    renderAliases();
     if (mattermost && draftSource) {
       mmUrl.value = draftSource.baseUrl;
       const synced = draftSource.syncedAt
@@ -271,6 +277,9 @@
       const merged = VRMattermost.applySnapshot({ aliases: existing?.aliases || {} }, snapshot.members);
 
       draftSource = { ...source, syncedAt: snapshot.fetchedAt };
+      draftAliases = Object.fromEntries(
+        Object.entries(merged.aliases || {}).map(([key, values]) => [key, [...values]])
+      );
       rosterText.value = merged.participants.join("\n");
       detailedRows = merged.participants.map((name) =>
         rowFromParticipant(name, { aliases: merged.aliases, statuses: existing?.statuses || {} })
@@ -311,6 +320,51 @@
       (currentTitleKey && state.titleAssignments?.[currentTitleKey] === roster.id);
     const people = `${roster.participants.length} чел.`;
     rosterSummary.textContent = bound ? `${people} · запомнен для этой встречи` : people;
+  }
+
+  function renderAliases() {
+    aliasesList.replaceChildren();
+    const namesByKey = new Map(
+      VRMeetups.parseExpected(rosterText.value).map((name) => [VRMeetups.comparisonKey(name), name])
+    );
+    const rows = Object.entries(draftAliases).flatMap(([key, aliases]) =>
+      (aliases || []).map((alias) => ({ key, name: namesByKey.get(key) || key, alias }))
+    );
+    aliasesBlock.hidden = rows.length === 0;
+
+    rows.forEach(({ key, name, alias }) => {
+      const row = document.createElement("div");
+      row.className = "alias-row";
+      const mapping = document.createElement("span");
+      mapping.textContent = `${name} ← ${alias}`;
+      mapping.title = mapping.textContent;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "alias-remove";
+      remove.textContent = "×";
+      remove.title = `Удалить псевдоним ${alias}`;
+      remove.setAttribute("aria-label", remove.title);
+      remove.addEventListener("click", () => {
+        draftAliases[key] = (draftAliases[key] || []).filter(
+          (item) => VRMeetups.comparisonKey(item) !== VRMeetups.comparisonKey(alias)
+        );
+        if (!draftAliases[key].length) delete draftAliases[key];
+        syncDetailedAliases();
+        renderAliases();
+        showStatus("Псевдоним удалён. Не забудьте «Сохранить».", "success");
+      });
+      row.append(mapping, remove);
+      aliasesList.append(row);
+    });
+  }
+
+  // Карточки подробного редактора и карта псевдонимов должны показывать одно
+  // и то же.
+  function syncDetailedAliases() {
+    detailedRows.forEach((row) => {
+      row.aliases = [...(draftAliases[VRMeetups.comparisonKey(row.name)] || [])];
+    });
+    if (detailedActive()) renderDetailedRows();
   }
 
   function timingForStatus(status) {
@@ -452,6 +506,10 @@
       aliasesInput.placeholder = "Lipanti Nick, другой ник";
       aliasesInput.addEventListener("input", () => {
         row.aliases = aliasesInput.value.split(/[,;\n]+/).map((value) => value.trim()).filter(Boolean);
+        const key = VRMeetups.comparisonKey(row.name);
+        if (row.aliases.length) draftAliases[key] = [...row.aliases];
+        else delete draftAliases[key];
+        aliasesBlock.hidden = true;
       });
 
       card.append(top, statusFields, rangeFields, createField("Псевдонимы через запятую", aliasesInput));
@@ -481,6 +539,9 @@
     deleteButton.disabled = !roster;
     draftSource = roster?.source ? { ...roster.source } : null;
     stashedSource = null;
+    draftAliases = Object.fromEntries(
+      Object.entries(roster?.aliases || {}).map(([key, values]) => [key, [...values]])
+    );
     draftMode = roster ? VRMeetups.rosterMode(roster) : "mattermost";
     applyMode();
   }
@@ -503,6 +564,7 @@
     deleteButton.disabled = true;
     draftSource = null;
     stashedSource = null;
+    draftAliases = {};
     // Новый список по умолчанию берётся из Mattermost.
     draftMode = "mattermost";
     applyMode();
@@ -532,7 +594,9 @@
         if (!validStatus) throw new Error(`Проверьте период статуса у участника «${participant}».`);
         statuses[key] = validStatus;
       }
-      const candidateAliases = row ? row.aliases : (existing?.aliases?.[key] || []);
+      const candidateAliases = row?.aliases?.length
+        ? row.aliases
+        : (draftAliases[key] || existing?.aliases?.[key] || []);
       if (candidateAliases.length) aliases[key] = candidateAliases;
     });
     return { participants, statuses, aliases };
@@ -782,6 +846,36 @@
     showStatus(highlightPresent.checked ? "Подсветка пришедших включена." : "Подсветка пришедших выключена.", "success");
   });
 
+  // Панель живёт долго, поэтому реагирует на просьбу со страницы открыть
+  // редактор и на правки списков, сделанные там же.
+  async function applyEditorIntent() {
+    const stored = await chrome.storage.local.get("editorIntent");
+    const intent = VRMeetups.editorIntent(stored.editorIntent);
+    if (!intent) return;
+    await chrome.storage.local.remove("editorIntent");
+
+    state = await VRMStorage.load();
+    if (intent.blank) {
+      fillSelect(null);
+      startNewRoster();
+    } else {
+      const roster = VRMeetups.rosterById(state.rosters, intent.rosterId);
+      if (!roster) return;
+      fillSelect(roster.id);
+      showRoster(roster);
+      showStatus(`Редактируем список «${roster.name}».`, "success");
+    }
+    rosterName.focus();
+    rosterName.select();
+  }
+
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+    if (changes.editorIntent?.newValue) {
+      applyEditorIntent().catch((error) => showStatus(error.message, "error"));
+    }
+  });
+
   chrome.tabs.onActivated.addListener(() => {
     refreshTabContext().catch(() => {});
   });
@@ -791,5 +885,7 @@
     }
   });
 
-  init().catch((error) => showStatus(error.message, "error"));
+  init()
+    .then(applyEditorIntent)
+    .catch((error) => showStatus(error.message, "error"));
 })();

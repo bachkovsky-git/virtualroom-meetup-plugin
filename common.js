@@ -153,6 +153,21 @@
     return Boolean(lastUserScrollAt) && moment - lastUserScrollAt < SCROLL_QUIET_MS;
   }
 
+  // Со страницы просят открыть редактор: намерение кладётся в хранилище, а
+  // панель применяет его, когда откроется. Просроченные не применяем, иначе
+  // редактор откроется на чужом списке через час.
+  const INTENT_TTL_MS = 300000;
+
+  function editorIntent(raw, now = Date.now()) {
+    if (!raw || typeof raw !== "object") return null;
+    const at = Number(raw.at) || 0;
+    if (at && now - at > INTENT_TTL_MS) return null;
+    const rosterId = String(raw.rosterId || "");
+    const blank = raw.blank === true;
+    if (!blank && !rosterId) return null;
+    return { rosterId: blank ? "" : rosterId, blank };
+  }
+
   // Результат прошлой проверки хранится по паре «комната + список», чтобы при
   // повторном открытии панели раздел рисовался сразу, до новой проверки.
   function resultKey(roomKey, rosterId) {
@@ -264,6 +279,7 @@
     missingSignature,
     resultKey,
     pruneCache,
+    editorIntent,
     localDateISO,
     addLocalDays,
     normalizeStatus,

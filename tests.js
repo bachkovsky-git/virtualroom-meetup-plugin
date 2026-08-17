@@ -113,6 +113,23 @@ check("нет привязки — нет списка",
 check("в окне расширения запасной вариант остаётся",
   VRMeetups.rosterForRoom(bindState, "https://vr.example.com/room/99", "другая встреча")?.id, "r2");
 
+// --- common.js: намерение открыть редактор ----------------------------------
+
+const intentNow = Date.parse("2026-08-17T12:00:00Z");
+check("намерение открыть список",
+  VRMeetups.editorIntent({ rosterId: "r1", at: intentNow - 1000 }, intentNow), { rosterId: "r1", blank: false });
+check("намерение создать новый",
+  VRMeetups.editorIntent({ blank: true, at: intentNow }, intentNow), { rosterId: "", blank: true });
+check("создание важнее переданного id",
+  VRMeetups.editorIntent({ rosterId: "r1", blank: true, at: intentNow }, intentNow), { rosterId: "", blank: true });
+check("просроченное намерение не применяется",
+  VRMeetups.editorIntent({ rosterId: "r1", at: intentNow - 400000 }, intentNow), null);
+check("пустое намерение не применяется", VRMeetups.editorIntent({ at: intentNow }, intentNow), null);
+check("мусор не применяется", VRMeetups.editorIntent("строка", intentNow), null);
+check("отсутствие намерения не ломает", VRMeetups.editorIntent(undefined, intentNow), null);
+check("намерение без времени считается свежим",
+  VRMeetups.editorIntent({ rosterId: "r1" }, intentNow), { rosterId: "r1", blank: false });
+
 // --- common.js: кеш последнего результата -----------------------------------
 
 check("ключ кеша из комнаты и списка",

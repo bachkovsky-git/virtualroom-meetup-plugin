@@ -187,6 +187,24 @@ const handlers = {
   async VRM_MM_ACCESS({ baseUrl }) {
     return { granted: await hasAccess(baseUrl) };
   },
+  // Редактор живёт в боковой панели. Со страницы просят её открыть: намерение
+  // сохраняется всегда, а само открытие Chrome может отклонить, если сочтёт,
+  // что жеста пользователя не было — тогда панель откроют значком, и намерение
+  // применится там.
+  async VRM_OPEN_EDITOR({ rosterId, blank }, sender) {
+    await chrome.storage.local.set({
+      editorIntent: { rosterId: String(rosterId || ""), blank: blank === true, at: Date.now() }
+    });
+
+    const windowId = sender?.tab?.windowId;
+    if (!chrome.sidePanel?.open || windowId === undefined) return { opened: false, needsClick: true };
+    try {
+      await chrome.sidePanel.open({ windowId });
+      return { opened: true };
+    } catch (_error) {
+      return { opened: false, needsClick: true };
+    }
+  },
   // Состояние подключения одним запросом: выдан ли доступ к домену, есть ли
   // сессионная кука и под кем мы вошли. Нужно, чтобы не показывать «Войти»
   // тому, кто уже вошёл.
@@ -233,10 +251,10 @@ if (!chrome.sidePanel) {
   });
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = handlers[message?.type];
   if (!handler) return undefined;
-  handler(message)
+  handler(message, sender)
     .then((payload) => sendResponse({ ok: true, ...payload }))
     .catch((error) => sendResponse({ ok: false, code: error.code || "error", message: error.message }));
   return true;

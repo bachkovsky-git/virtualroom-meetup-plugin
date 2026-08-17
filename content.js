@@ -5,7 +5,6 @@
   const LIST_CONTAINER_SELECTOR = '[class*="ParticipantListContainer"]';
   const SCROLLER_SELECTOR = '.participant-list, [class*="GridScrollContainer"]';
   const MISSING_ID = "vrm-attendance-missing";
-  const PICKER_ID = "vrm-roster-picker";
   const STATUS_MENU_ID = "vrm-attendance-status-menu";
   const GEAR_PATH = "m14.54 7.37 1.065-.58a.755.755 0 0 0 .366-.873c-.366-1.356-1.132-2.583-2.13-3.584-.266-.226-.666-.29-.965-.13l-1.065.614a4.5 4.5 0 0 0-1.098-.613V1.009c0-.355-.233-.646-.6-.743a8.5 8.5 0 0 0-4.226 0c-.366.097-.6.388-.6.743v1.195a4.5 4.5 0 0 0-1.098.613l-1.065-.613c-.3-.162-.699-.097-.965.129C1.161 3.334.395 4.561.03 5.917c-.1.355.067.71.366.872l1.065.581c-.033.226-.033.42-.033.646 0 .194 0 .388.033.581l-1.065.614a.755.755 0 0 0-.366.872c.366 1.356 1.132 2.583 2.13 3.584.266.226.666.29.965.13l1.065-.614c.333.258.7.452 1.099.613v1.195c0 .355.233.646.599.743a8.5 8.5 0 0 0 4.226 0c.367-.097.6-.388.6-.743v-1.195c.399-.161.765-.355 1.098-.613l1.065.613c.3.162.699.097.965-.129.998-1.001 1.764-2.228 2.13-3.584a.755.755 0 0 0-.366-.872l-1.065-.614a7.6 7.6 0 0 0 0-1.227m-1.764 2.067 1.464.807c-.266.678-.632 1.324-1.131 1.873l-1.465-.807c-1.065.872-1.198.968-2.53 1.42v1.647a6.4 6.4 0 0 1-2.229 0v-1.646c-1.331-.453-1.498-.55-2.53-1.421l-1.464.807c-.499-.549-.865-1.195-1.131-1.873l1.464-.807c-.266-1.356-.266-1.518 0-2.874L1.76 5.756c.266-.678.632-1.324 1.131-1.873l1.465.807c1.065-.872 1.198-.969 2.53-1.42V1.622a6.4 6.4 0 0 1 2.229 0v1.646c1.331.452 1.498.55 2.53 1.421l1.464-.807c.499.549.865 1.195 1.131 1.873l-1.464.807c.266 1.356.266 1.518 0 2.874m-4.76-4.553c-1.763 0-3.194 1.42-3.194 3.1 0 1.711 1.43 3.1 3.195 3.1 1.73 0 3.195-1.389 3.195-3.1 0-1.68-1.465-3.1-3.195-3.1m0 4.65c-.898 0-1.597-.678-1.597-1.55 0-.84.699-1.55 1.598-1.55.865 0 1.597.71 1.597 1.55 0 .872-.732 1.55-1.597 1.55";
   const AUTO_SCAN_DELAY = 1200;
@@ -39,6 +38,8 @@
   let autoScanWaitingSince = 0;
   let watchedScroller = null;
   let resultCache = {};
+  let editorHint = "";
+  let editorHintTimer = null;
 
   function currentRoomKey() {
     return VRMeetups.roomKey(location.href);
@@ -413,8 +414,7 @@
     createLabel.textContent = "Создать новый";
     create.append(createIcon, createLabel);
     create.addEventListener("click", () => {
-      closeStatusMenu();
-      showRosterPicker({ blank: true });
+      openEditor({ blank: true });
     });
     menu.append(separator, create);
 
@@ -443,13 +443,13 @@
     const button = document.createElement("button");
     button.type = "button";
     button.className = "vrm-settings-button";
-    button.title = "Настроить список ожидаемых участников";
+    button.title = "Настроить список в панели расширения";
     button.setAttribute("aria-label", button.title);
     button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="${GEAR_PATH}" clip-rule="evenodd"></path></svg>`;
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      showRosterPicker();
+      openEditor(activeRoster ? { rosterId: activeRoster.id } : { blank: true });
     });
     return button;
   }
@@ -849,7 +849,8 @@
   function renderPrompt(panel) {
     const signature = VRMeetups.missingSignature([], {
       prompt: "1",
-      rosters: state.rosters.length
+      rosters: state.rosters.length,
+      hint: editorHint
     });
     const existing = document.getElementById(MISSING_ID);
     if (existing && existing.parentElement === panel.listContainer && signature === lastRenderSignature) return;
@@ -899,12 +900,13 @@
       action.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        showRosterPicker({ blank: true });
+        openEditor({ blank: true });
       });
     }
     buttons.append(action);
 
     body.append(text, buttons);
+    if (editorHint) body.append(createEditorHint());
     const delimiter = document.createElement("div");
     delimiter.className = "vrm-missing-delimiter";
     section.append(header, body, delimiter);
@@ -928,6 +930,7 @@
         roster: activeRoster.name,
         collapsed: state.missingCollapsed === true,
         notice: mmNotice,
+        hint: editorHint,
         stale
       }
     );
@@ -964,6 +967,7 @@
     actions.append(createGearButton());
     header.append(createCollapseButton(section), label, count, rosterLabel, actions);
     section.append(header);
+    if (editorHint) section.append(createEditorHint());
 
     const body = document.createElement("div");
     body.className = "vrm-missing-body";
@@ -1019,294 +1023,42 @@
     panel.listContainer.insertBefore(section, panel.scroller);
   }
 
-  function closeRosterPicker() {
-    document.getElementById(PICKER_ID)?.remove();
+  // Редактор списков живёт в боковой панели расширения: своего окна на
+  // странице больше нет.
+  async function openEditor(options) {
+    closeStatusMenu();
+    let response;
+    try {
+      response = await chrome.runtime.sendMessage({ type: "VRM_OPEN_EDITOR", ...options });
+    } catch (_error) {
+      response = null;
+    }
+    if (response?.ok && !response.needsClick) return;
+
+    editorHint = "Откройте панель расширения по значку — редактор уже готов.";
+    redrawBlock();
+    clearTimeout(editorHintTimer);
+    editorHintTimer = setTimeout(() => {
+      editorHint = "";
+      redrawBlock();
+    }, 15000);
   }
 
-  function showRosterPicker({ blank = false } = {}) {
-    closeRosterPicker();
-    const overlay = document.createElement("div");
-    overlay.id = PICKER_ID;
-    overlay.setAttribute("data-vrm-extension", "true");
-    const dialog = document.createElement("div");
-    dialog.className = "vrm-picker-dialog";
-    dialog.setAttribute("role", "dialog");
-    dialog.setAttribute("aria-modal", "true");
-
-    const title = document.createElement("h2");
-    title.className = "vrm-picker-title";
-    title.textContent = "Список ожидаемых участников";
-    const description = document.createElement("p");
-    description.className = "vrm-picker-description";
-    description.textContent = "Выберите список, измените его состав или создайте новый.";
-
-    const select = document.createElement("select");
-    const newButton = document.createElement("button");
-    newButton.type = "button";
-    newButton.className = "vrm-picker-new";
-    newButton.textContent = "+ Новый";
-
-    const selectLabel = document.createElement("label");
-    selectLabel.className = "vrm-picker-label";
-    selectLabel.textContent = "Готовый список";
-    const selectWrap = document.createElement("div");
-    selectWrap.className = "vrm-picker-field-grow";
-    selectWrap.append(selectLabel, select);
-    const selectRow = document.createElement("div");
-    selectRow.className = "vrm-picker-field-row";
-    selectRow.append(selectWrap, newButton);
-
-    const nameLabel = document.createElement("label");
-    nameLabel.className = "vrm-picker-label";
-    nameLabel.textContent = "Название списка";
-    const nameInput = document.createElement("input");
-    nameInput.type = "text";
-    nameInput.maxLength = 80;
-    nameInput.placeholder = "Например, продуктовый митап";
-
-    const peopleLabel = document.createElement("label");
-    peopleLabel.className = "vrm-picker-label";
-    peopleLabel.textContent = "Ожидаемые участники";
-    const peopleInput = document.createElement("textarea");
-    peopleInput.placeholder = "Иван Иванов\nМария Петрова";
-    peopleInput.spellcheck = false;
-    const hint = document.createElement("p");
-    hint.className = "vrm-picker-hint";
-    hint.textContent = "По одному человеку на строку. Можно дописать людей в текущий список.";
-
-    const sourceBox = document.createElement("div");
-    sourceBox.className = "vrm-picker-source";
-    const sourceText = document.createElement("span");
-    const sourceSync = document.createElement("button");
-    sourceSync.type = "button";
-    sourceSync.className = "vrm-picker-source-sync";
-    sourceSync.textContent = "Обновить";
-    const sourceDetach = document.createElement("button");
-    sourceDetach.type = "button";
-    sourceDetach.className = "vrm-picker-source-detach";
-    sourceDetach.textContent = "Отвязать";
-    sourceBox.append(sourceText, sourceSync, sourceDetach);
-
-    const aliasesLabel = document.createElement("div");
-    aliasesLabel.className = "vrm-picker-label vrm-picker-aliases-label";
-    aliasesLabel.textContent = "Сохранённые псевдонимы";
-    const aliasesList = document.createElement("div");
-    aliasesList.className = "vrm-picker-aliases";
-
-    let draftId = null;
-    let draftAliases = {};
-    let draftSource = null;
-
-    function renderSource() {
-      const linked = draftSource?.type === "mattermost";
-      sourceBox.hidden = !linked;
-      peopleInput.readOnly = linked;
-      peopleInput.classList.toggle("vrm-is-readonly", linked);
-      hint.textContent = linked
-        ? "Состав приходит из Mattermost и обновляется автоматически. Правки здесь не сохранятся."
-        : "По одному человеку на строку. Можно дописать людей в текущий список.";
-      if (linked) {
-        const channel = draftSource.channelDisplayName || draftSource.channelName;
-        sourceText.textContent = `Канал Mattermost: ${channel}`;
-        sourceText.title = `${draftSource.baseUrl} — ${channel}`;
-      }
-    }
-
-    sourceDetach.addEventListener("click", () => {
-      draftSource = null;
-      renderSource();
-      peopleInput.focus();
-    });
-
-    sourceSync.addEventListener("click", async () => {
-      if (!draftSource) return;
-      sourceSync.disabled = true;
-      sourceSync.textContent = "Обновляю…";
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: "VRM_MM_SNAPSHOT",
-          source: draftSource,
-          force: true
-        });
-        if (!response?.ok) throw new Error(response?.message || "Не удалось получить данные из Mattermost.");
-        const merged = VRMattermost.applySnapshot({ aliases: draftAliases }, response.members);
-        peopleInput.value = merged.participants.join("\n");
-        draftAliases = merged.aliases;
-        draftSource = { ...draftSource, syncedAt: response.fetchedAt };
-        renderAliases();
-        sourceText.textContent = `Канал Mattermost: ${response.channel.displayName} — ${merged.participants.length} чел.`;
-      } catch (error) {
-        sourceText.textContent = error.message;
-      } finally {
-        sourceSync.disabled = false;
-        sourceSync.textContent = "Обновить";
-      }
-    });
-
-    function fillSelect(selectedId) {
-      select.replaceChildren();
-      state.rosters.forEach((roster) => {
-        const option = document.createElement("option");
-        option.value = roster.id;
-        option.textContent = roster.name;
-        select.append(option);
-      });
-      select.disabled = !state.rosters.length;
-      if (selectedId && VRMeetups.rosterById(state.rosters, selectedId)) select.value = selectedId;
-    }
-
-    function editRoster(roster) {
-      draftId = roster?.id || VRMStorage.newId();
-      nameInput.value = roster?.name || "";
-      peopleInput.value = (roster?.participants || []).join("\n");
-      draftAliases = Object.fromEntries(
-        Object.entries(roster?.aliases || {}).map(([key, values]) => [key, [...values]])
-      );
-      draftSource = roster?.source ? { ...roster.source } : null;
-      renderSource();
-      renderAliases();
-    }
-
-    function renderAliases() {
-      aliasesList.replaceChildren();
-      const participantsByKey = new Map(
-        VRMeetups.parseExpected(peopleInput.value).map((name) => [VRMeetups.comparisonKey(name), name])
-      );
-      const rows = Object.entries(draftAliases).flatMap(([expectedKey, aliases]) =>
-        aliases.map((alias) => ({ expectedKey, expectedName: participantsByKey.get(expectedKey) || expectedKey, alias }))
-      );
-      aliasesLabel.hidden = rows.length === 0;
-      aliasesList.hidden = rows.length === 0;
-
-      rows.forEach(({ expectedKey, expectedName, alias }) => {
-        const row = document.createElement("div");
-        row.className = "vrm-picker-alias-row";
-        const mapping = document.createElement("span");
-        mapping.textContent = `${expectedName} ← ${alias}`;
-        mapping.title = mapping.textContent;
-        const remove = document.createElement("button");
-        remove.type = "button";
-        remove.className = "vrm-picker-alias-remove";
-        remove.textContent = "×";
-        remove.title = `Удалить псевдоним ${alias}`;
-        remove.setAttribute("aria-label", remove.title);
-        remove.addEventListener("click", () => {
-          draftAliases[expectedKey] = (draftAliases[expectedKey] || []).filter(
-            (item) => VRMeetups.comparisonKey(item) !== VRMeetups.comparisonKey(alias)
-          );
-          if (!draftAliases[expectedKey].length) delete draftAliases[expectedKey];
-          renderAliases();
-        });
-        row.append(mapping, remove);
-        aliasesList.append(row);
-      });
-    }
-
-    fillSelect(blank ? null : activeRoster?.id);
-    editRoster(blank ? null : activeRoster);
-    if (blank) select.selectedIndex = -1;
-
-
-    const highlight = document.createElement("label");
-    highlight.className = "vrm-picker-bind";
-    const highlightCheckbox = document.createElement("input");
-    highlightCheckbox.type = "checkbox";
-    highlightCheckbox.checked = state.highlightPresent !== false;
-    const highlightText = document.createElement("span");
-    highlightText.textContent = "Подсвечивать пришедших пользователей";
-    highlight.append(highlightCheckbox, highlightText);
-    const settings = document.createElement("div");
-    settings.className = "vrm-picker-settings";
-    settings.append(highlight);
-
-    const actions = document.createElement("div");
-    actions.className = "vrm-picker-actions";
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "vrm-picker-cancel";
-    cancel.textContent = "Отмена";
-    const apply = document.createElement("button");
-    apply.type = "button";
-    apply.className = "vrm-picker-apply";
-    apply.textContent = "Сохранить и выбрать";
-    actions.append(cancel, apply);
-    dialog.append(
-      title,
-      description,
-      selectRow,
-      nameLabel,
-      nameInput,
-      peopleLabel,
-      peopleInput,
-      hint,
-      sourceBox,
-      aliasesLabel,
-      aliasesList,
-      settings,
-      actions
-    );
-    overlay.append(dialog);
-    document.documentElement.append(overlay);
-
-    cancel.addEventListener("click", closeRosterPicker);
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) closeRosterPicker();
-    });
-    select.addEventListener("change", () => {
-      const selected = VRMeetups.rosterById(state.rosters, select.value);
-      editRoster(selected);
-    });
-    newButton.addEventListener("click", () => {
-      select.selectedIndex = -1;
-      editRoster(null);
-      nameInput.focus();
-    });
-    peopleInput.addEventListener("input", renderAliases);
-    apply.addEventListener("click", async () => {
-      const name = nameInput.value.trim();
-      const participants = VRMeetups.parseExpected(peopleInput.value);
-      if (!name) {
-        nameInput.focus();
-        nameInput.setCustomValidity("Введите название списка");
-        nameInput.reportValidity();
-        return;
-      }
-      nameInput.setCustomValidity("");
-      if (!participants.length) {
-        peopleInput.focus();
-        peopleInput.setCustomValidity("Добавьте хотя бы одного участника");
-        peopleInput.reportValidity();
-        return;
-      }
-      peopleInput.setCustomValidity("");
-
-      const existingIndex = state.rosters.findIndex((roster) => roster.id === draftId);
-      const existing = state.rosters[existingIndex];
-      const savedRoster = {
-        id: draftId || VRMStorage.newId(),
-        name,
-        participants,
-        statuses: existing?.statuses || {},
-        aliases: draftAliases,
-        source: draftSource,
-        createdAt: existing?.createdAt || Date.now(),
-        updatedAt: Date.now()
-      };
-      if (existingIndex >= 0) state.rosters[existingIndex] = savedRoster;
-      else state.rosters.push(savedRoster);
-
-      appliedSnapshotKey = "";
-      state.selectedRosterId = savedRoster.id;
-      state.highlightPresent = highlightCheckbox.checked;
-      state.roomAssignments = { ...state.roomAssignments, [currentRoomKey()]: savedRoster.id };
-      const titleKey = currentTitleKey();
-      if (titleKey) state.titleAssignments = { ...state.titleAssignments, [titleKey]: savedRoster.id };
-      state = await VRMStorage.save(state);
-      activeRoster = savedRoster;
-      closeRosterPicker();
-      await scanParticipants(savedRoster.id);
-    });
+  function createEditorHint() {
+    const hint = document.createElement("div");
+    hint.className = "vrm-editor-hint";
+    hint.textContent = editorHint;
+    return hint;
   }
+
+  function redrawBlock() {
+    const panel = findPanel();
+    if (!panel) return;
+    lastRenderSignature = "";
+    if (activeRoster) showRememberedResult();
+    else renderPrompt(panel);
+  }
+
 
   async function scanParticipants(preferredRosterId) {
     if (scanning) return { ok: false, message: "Проверка уже выполняется. Подождите несколько секунд." };

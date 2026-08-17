@@ -182,6 +182,49 @@ textarea {
 
 .mm-session .text-button { margin: 0; flex: 0 0 auto; }
 
+.aliases-list {
+  display: grid;
+  gap: 5px;
+  max-height: 160px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+
+.alias-row {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #d8dfe2;
+  border-radius: 8px;
+  padding: 4px 4px 4px 10px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.alias-row span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #344249;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alias-remove {
+  display: grid;
+  width: 26px;
+  min-height: 26px;
+  flex: 0 0 26px;
+  place-items: center;
+  padding: 0;
+  color: #9d3d3d;
+  background: #f9e7e7;
+  font-size: 16px;
+}
+
+.alias-remove:hover { background: #f3d7d7; }
+
 .mm-setting { margin: 0 0 13px; }
 
 .mm-fields {
