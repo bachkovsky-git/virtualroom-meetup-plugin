@@ -630,6 +630,41 @@
     mmPrepare();
   }
 
+  // Есть ли несохранённые правки — чтобы не затереть их при переходе на
+  // другую вкладку.
+  function isDirty() {
+    const roster = VRMeetups.rosterById(state.rosters, draftId);
+    const typedNames = VRMeetups.parseExpected(rosterText.value).join("\n");
+    if (!roster) return Boolean(rosterName.value.trim() || typedNames);
+    return rosterName.value.trim() !== roster.name || typedNames !== roster.participants.join("\n");
+  }
+
+  // Панель не закрывается при переключении вкладок, поэтому сама следит за
+  // тем, какая встреча сейчас открыта.
+  async function refreshTabContext() {
+    const tab = await getActiveTab();
+    if (!tab) return;
+    const roomKey = VRMeetups.roomKey(tab.url || "");
+    const titleKey = VRMeetups.roomTitleKey(tab.title || "");
+    if (tab.id === currentTab?.id && roomKey === currentRoomKey && titleKey === currentTitleKey) return;
+
+    currentTab = tab;
+    currentRoomKey = roomKey;
+    currentTitleKey = titleKey;
+    roomLabel.textContent = tab.title || roomKey || "Текущая вкладка";
+    roomLabel.title = roomKey;
+    state = await VRMStorage.load();
+
+    // Список другой встречи подставляется только когда терять нечего.
+    const roster = VRMeetups.rosterForRoom(state, currentRoomKey, currentTitleKey);
+    if (roster && roster.id !== draftId && !isDirty()) {
+      fillSelect(roster.id);
+      showRoster(roster);
+    } else {
+      showRosterSummary(VRMeetups.rosterById(state.rosters, draftId));
+    }
+  }
+
   // Состояние подключения решает, показывать ли «Войти»: тому, кто уже вошёл,
   // кнопка не нужна.
   function showSession(session) {
@@ -745,6 +780,15 @@
     state.highlightPresent = highlightPresent.checked;
     state = await VRMStorage.save(state);
     showStatus(highlightPresent.checked ? "Подсветка пришедших включена." : "Подсветка пришедших выключена.", "success");
+  });
+
+  chrome.tabs.onActivated.addListener(() => {
+    refreshTabContext().catch(() => {});
+  });
+  chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+    if (tabId === currentTab?.id && (changeInfo.url || changeInfo.title)) {
+      refreshTabContext().catch(() => {});
+    }
   });
 
   init().catch((error) => showStatus(error.message, "error"));

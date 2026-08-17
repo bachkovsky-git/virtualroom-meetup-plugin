@@ -7,14 +7,18 @@
 
 * { box-sizing: border-box; }
 
+/* Окно живёт в боковой панели, ширину которой пользователь тянет сам,
+   поэтому размеры не фиксируются. */
+html, body { height: 100%; }
+
 body {
-  width: 480px;
+  min-width: 300px;
   margin: 0;
 }
 
 main {
-  max-height: 600px;
-  overflow-y: auto;
+  box-sizing: border-box;
+  min-height: 100%;
   padding: 18px;
 }
 

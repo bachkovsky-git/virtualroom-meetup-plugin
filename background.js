@@ -209,6 +209,30 @@ const handlers = {
   }
 };
 
+// Всплывающее окно расширения Chrome закрывает при любой потере фокуса, и
+// отключить это нельзя. Поэтому иконка открывает боковую панель: она живёт,
+// пока её не закроют, и переживает переключение окон и вкладок.
+function enableSidePanel() {
+  chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => {});
+}
+
+chrome.runtime.onInstalled.addListener(enableSidePanel);
+chrome.runtime.onStartup.addListener(enableSidePanel);
+enableSidePanel();
+
+// Запасной путь для сборок без Side Panel API: то же окно настроек, но
+// отдельным окном браузера.
+if (!chrome.sidePanel) {
+  chrome.action.onClicked.addListener(() => {
+    chrome.windows.create({
+      url: chrome.runtime.getURL("popup.html"),
+      type: "popup",
+      width: 520,
+      height: 720
+    });
+  });
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const handler = handlers[message?.type];
   if (!handler) return undefined;
