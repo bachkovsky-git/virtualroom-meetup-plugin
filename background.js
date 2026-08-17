@@ -222,7 +222,38 @@ chrome.windows?.onRemoved?.addListener((closedId) => {
   if (closedId === editorWindowId) editorWindowId = null;
 });
 
+// Последняя встреча, о которой сообщила страница. Редактор в отдельном окне
+// узнаёт из этого, к какой вкладке относиться: сам он видит только себя.
+const MEETING_KEY = "lastMeeting";
+
 const handlers = {
+  async VRM_MEETING_HERE({ roomKey, titleKey, title }, sender) {
+    const tabId = sender?.tab?.id;
+    if (tabId === undefined) return { stored: false };
+    await chrome.storage.local.set({
+      [MEETING_KEY]: {
+        tabId,
+        windowId: sender?.tab?.windowId ?? null,
+        roomKey: String(roomKey || ""),
+        titleKey: String(titleKey || ""),
+        title: String(title || ""),
+        at: Date.now()
+      }
+    });
+    return { stored: true };
+  },
+  // Редактор спрашивает контекст встречи. Отдаём только живую вкладку, иначе
+  // список привяжется к закрытой комнате.
+  async VRM_MEETING_CONTEXT() {
+    const stored = (await chrome.storage.local.get(MEETING_KEY))[MEETING_KEY];
+    if (!stored?.tabId) return { meeting: null };
+    try {
+      await chrome.tabs.get(stored.tabId);
+    } catch (_error) {
+      return { meeting: null };
+    }
+    return { meeting: stored };
+  },
   async VRM_MM_CONNECT({ baseUrl }) {
     const user = await request(baseUrl, "/users/me");
     return { user: { id: user.id, username: user.username, name: VRMattermost.displayName(user) } };

@@ -8,6 +8,13 @@
   const STATUS_MENU_ID = "vrm-attendance-status-menu";
   const GEAR_PATH = "m14.54 7.37 1.065-.58a.755.755 0 0 0 .366-.873c-.366-1.356-1.132-2.583-2.13-3.584-.266-.226-.666-.29-.965-.13l-1.065.614a4.5 4.5 0 0 0-1.098-.613V1.009c0-.355-.233-.646-.6-.743a8.5 8.5 0 0 0-4.226 0c-.366.097-.6.388-.6.743v1.195a4.5 4.5 0 0 0-1.098.613l-1.065-.613c-.3-.162-.699-.097-.965.129C1.161 3.334.395 4.561.03 5.917c-.1.355.067.71.366.872l1.065.581c-.033.226-.033.42-.033.646 0 .194 0 .388.033.581l-1.065.614a.755.755 0 0 0-.366.872c.366 1.356 1.132 2.583 2.13 3.584.266.226.666.29.965.13l1.065-.614c.333.258.7.452 1.099.613v1.195c0 .355.233.646.599.743a8.5 8.5 0 0 0 4.226 0c.367-.097.6-.388.6-.743v-1.195c.399-.161.765-.355 1.098-.613l1.065.613c.3.162.699.097.965-.129.998-1.001 1.764-2.228 2.13-3.584a.755.755 0 0 0-.366-.872l-1.065-.614a7.6 7.6 0 0 0 0-1.227m-1.764 2.067 1.464.807c-.266.678-.632 1.324-1.131 1.873l-1.465-.807c-1.065.872-1.198.968-2.53 1.42v1.647a6.4 6.4 0 0 1-2.229 0v-1.646c-1.331-.453-1.498-.55-2.53-1.421l-1.464.807c-.499-.549-.865-1.195-1.131-1.873l1.464-.807c-.266-1.356-.266-1.518 0-2.874L1.76 5.756c.266-.678.632-1.324 1.131-1.873l1.465.807c1.065-.872 1.198-.969 2.53-1.42V1.622a6.4 6.4 0 0 1 2.229 0v1.646c1.331.452 1.498.55 2.53 1.421l1.464-.807c.499.549.865 1.195 1.131 1.873l-1.464.807c.266 1.356.266 1.518 0 2.874m-4.76-4.553c-1.763 0-3.194 1.42-3.194 3.1 0 1.711 1.43 3.1 3.195 3.1 1.73 0 3.195-1.389 3.195-3.1 0-1.68-1.465-3.1-3.195-3.1m0 4.65c-.898 0-1.597-.678-1.597-1.55 0-.84.699-1.55 1.598-1.55.865 0 1.597.71 1.597 1.55 0 .872-.732 1.55-1.597 1.55";
   const AUTO_SCAN_DELAY = 1200;
+  const ROOM_NAME_SELECTORS = [
+    '[class*="RoomName"]',
+    '[class*="RoomTitle"]',
+    '[class*="MeetingName"]',
+    '[class*="EventName"]',
+    '[class*="ConferenceName"]'
+  ];
   const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
   let state = {
@@ -39,6 +46,7 @@
   let watchedScroller = null;
   let resultCache = {};
   let editorHint = "";
+  let reportedMeeting = "";
   let editorHintTimer = null;
 
   function currentRoomKey() {
@@ -46,7 +54,34 @@
   }
 
   function currentTitleKey() {
-    return VRMeetups.roomTitleKey(document.title);
+    return VRMeetups.roomTitleKey(currentRoomTitle());
+  }
+
+  // Название встречи: сперва пробуем заголовок комнаты на странице, потом
+  // заголовок вкладки. Оно нужно и как запасной ключ привязки, и как заготовка
+  // названия для нового списка.
+  function currentRoomTitle() {
+    for (const selector of ROOM_NAME_SELECTORS) {
+      const text = document.querySelector(selector)?.textContent?.trim();
+      if (text && text.length >= 3) return VRMeetups.roomTitle(text);
+    }
+    return VRMeetups.roomTitle(document.title);
+  }
+
+  // Редактор живёт в отдельном окне и не может узнать вкладку встречи сам:
+  // о ней сообщает страница.
+  function reportMeeting() {
+    const context = {
+      roomKey: currentRoomKey(),
+      titleKey: currentTitleKey(),
+      title: currentRoomTitle()
+    };
+    const stamp = JSON.stringify(context);
+    if (stamp === reportedMeeting) return;
+    reportedMeeting = stamp;
+    chrome.runtime.sendMessage({ type: "VRM_MEETING_HERE", ...context }).catch(() => {
+      reportedMeeting = "";
+    });
   }
 
   // В комнате берётся только тот список, который к ней привязан: если привязки
@@ -223,6 +258,7 @@
   function showRememberedResult() {
     const panel = findPanel();
     if (!panel) return false;
+    reportMeeting();
     if (!activeRoster) {
       renderPrompt(panel);
       return true;
@@ -1091,6 +1127,7 @@
       const missing = activeRoster.participants.filter(
         (name) => !VRMeetups.participantIsPresent(activeRoster, name, actualNameKeys)
       );
+      reportMeeting();
       const rows = missing.map(rowView);
       renderResult(panel, rows, { expected: activeRoster.participants.length });
       rememberResult(rows);

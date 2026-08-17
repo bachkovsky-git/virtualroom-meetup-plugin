@@ -67,16 +67,21 @@
     return roster?.source?.type === "mattermost" ? "mattermost" : "manual";
   }
 
-  // Запасной ключ встречи: у части систем адрес комнаты каждый раз новый,
-  // и тогда привязку спасает название из заголовка вкладки. Счётчик
-  // непрочитанного и хвост с названием приложения отбрасываются.
-  function roomTitleKey(title) {
-    const cleaned = String(title || "")
+  // Название встречи в человеческом виде: без счётчика непрочитанного в начале
+  // и без хвоста с названием приложения. Годится и для показа, и как заготовка
+  // названия нового списка.
+  function roomTitle(title) {
+    return String(title || "")
       .replace(/^\s*\(\d+\)\s*/, "")
       .split(/\s+[—–|]\s+/)[0]
       .replace(/\s+/g, " ")
-      .trim()
-      .toLocaleLowerCase("ru-RU");
+      .trim();
+  }
+
+  // Запасной ключ встречи: у части систем адрес комнаты каждый раз новый,
+  // и тогда привязку спасает название встречи.
+  function roomTitleKey(title) {
+    const cleaned = roomTitle(title).toLocaleLowerCase("ru-RU");
     return cleaned.length >= 3 ? cleaned : "";
   }
 
@@ -267,6 +272,7 @@
     roomKey,
     rosterById,
     rosterMode,
+    roomTitle,
     roomTitleKey,
     assignedRoster,
     rosterForRoom,

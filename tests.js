@@ -96,6 +96,17 @@ check("лишние пробелы схлопываются",
 check("слишком короткое название не годится", VRMeetups.roomTitleKey("VR"), "");
 check("пустой заголовок не годится", VRMeetups.roomTitleKey(""), "");
 
+check("название встречи без счётчика непрочитанного",
+  VRMeetups.roomTitle("(3) Alpha Daily — VirtualRoom"), "Alpha Daily");
+check("название встречи без хвоста приложения",
+  VRMeetups.roomTitle("Бэкенд-митап | VirtualRoom"), "Бэкенд-митап");
+check("регистр названия встречи сохраняется",
+  VRMeetups.roomTitle("  VR2   Релиз  "), "VR2 Релиз");
+check("пустой заголовок даёт пустое название", VRMeetups.roomTitle(""), "");
+check("ключ встречи строится из названия",
+  VRMeetups.roomTitleKey("(3) Alpha Daily — VirtualRoom"),
+  VRMeetups.roomTitle("(3) Alpha Daily — VirtualRoom").toLocaleLowerCase("ru-RU"));
+
 const bindState = {
   rosters: [{ id: "r1", name: "Alpha Daily" }, { id: "r2", name: "VR2 релиз" }],
   roomAssignments: { "https://vr.example.com/room/7": "r1" },

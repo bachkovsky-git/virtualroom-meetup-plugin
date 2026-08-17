@@ -44,6 +44,9 @@
   let currentRoomKey = "";
   let currentTitleKey = "";
   let currentTab = null;
+  let currentMeetingTitle = "";
+  // Предзаполненное название не считается правкой пользователя.
+  let prefilledName = "";
   let draftId = null;
   let detailedRows = [];
   let draftSource = null;
@@ -72,9 +75,33 @@
     saveButton.textContent = busy ? "Сохраняю…" : "Сохранить";
   }
 
-  async function getActiveTab() {
+  // Редактор открывается отдельным окном, поэтому «активная вкладка текущего
+  // окна» — это он сам. Контекст встречи присылает страница через фон, а запрос
+  // вкладки остаётся запасным путём.
+  async function getMeetingContext() {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: "VRM_MEETING_CONTEXT" });
+      const meeting = response?.meeting;
+      if (meeting?.tabId) {
+        return {
+          tabId: meeting.tabId,
+          roomKey: meeting.roomKey || "",
+          titleKey: meeting.titleKey || "",
+          title: meeting.title || ""
+        };
+      }
+    } catch (_error) {
+      // Фон мог не ответить — ниже запасной путь.
+    }
+
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    return tab || null;
+    if (!tab || String(tab.url || "").startsWith("chrome-extension://")) return null;
+    return {
+      tabId: tab.id,
+      roomKey: VRMeetups.roomKey(tab.url || ""),
+      titleKey: VRMeetups.roomTitleKey(tab.title || ""),
+      title: VRMeetups.roomTitle(tab.title || "")
+    };
   }
 
   // --- Mattermost ---------------------------------------------------------
@@ -535,6 +562,7 @@
     draftAliases = Object.fromEntries(
       Object.entries(roster?.aliases || {}).map(([key, values]) => [key, [...values]])
     );
+    prefilledName = "";
     draftMode = roster ? VRMeetups.rosterMode(roster) : "mattermost";
     applyMode();
   }
@@ -551,7 +579,9 @@
   function startNewRoster() {
     draftId = VRMStorage.newId();
     rosterSelect.selectedIndex = -1;
-    rosterName.value = "";
+    // Название встречи — самая вероятная заготовка для названия списка.
+    rosterName.value = currentMeetingTitle;
+    prefilledName = currentMeetingTitle;
     rosterText.value = "";
     detailedRows = [];
     deleteButton.disabled = true;
@@ -563,7 +593,13 @@
     applyMode();
     mmPrepare();
     rosterName.focus();
-    showStatus("Введите название и состав нового списка.", "success");
+    rosterName.select();
+    showStatus(
+      currentMeetingTitle
+        ? `Название взято из встречи — поправьте, если нужно, и выберите состав.`
+        : "Введите название и состав нового списка.",
+      "success"
+    );
   }
 
   function collectRosterData(existing) {
@@ -671,9 +707,11 @@
   }
 
   async function init() {
-    currentTab = await getActiveTab();
-    currentRoomKey = VRMeetups.roomKey(currentTab?.url || "");
-    currentTitleKey = VRMeetups.roomTitleKey(currentTab?.title || "");
+    const meeting = await getMeetingContext();
+    currentTab = meeting ? { id: meeting.tabId } : null;
+    currentRoomKey = meeting?.roomKey || "";
+    currentTitleKey = meeting?.titleKey || "";
+    currentMeetingTitle = meeting?.title || "";
     [state, mmLists] = await Promise.all([VRMStorage.load(), VRMStorage.loadLists()]);
     highlightPresent.checked = state.highlightPresent !== false;
     mmStatuses.checked = state.showMattermostStatuses !== false;
@@ -690,22 +728,23 @@
   function isDirty() {
     const roster = VRMeetups.rosterById(state.rosters, draftId);
     const typedNames = VRMeetups.parseExpected(rosterText.value).join("\n");
-    if (!roster) return Boolean(rosterName.value.trim() || typedNames);
+    if (!roster) return Boolean((rosterName.value.trim() && rosterName.value.trim() !== prefilledName) || typedNames);
     return rosterName.value.trim() !== roster.name || typedNames !== roster.participants.join("\n");
   }
 
   // Панель не закрывается при переключении вкладок, поэтому сама следит за
   // тем, какая встреча сейчас открыта.
   async function refreshTabContext() {
-    const tab = await getActiveTab();
-    if (!tab) return;
-    const roomKey = VRMeetups.roomKey(tab.url || "");
-    const titleKey = VRMeetups.roomTitleKey(tab.title || "");
-    if (tab.id === currentTab?.id && roomKey === currentRoomKey && titleKey === currentTitleKey) return;
+    const meeting = await getMeetingContext();
+    if (!meeting) return;
+    if (meeting.tabId === currentTab?.id &&
+      meeting.roomKey === currentRoomKey &&
+      meeting.titleKey === currentTitleKey) return;
 
-    currentTab = tab;
-    currentRoomKey = roomKey;
-    currentTitleKey = titleKey;
+    currentTab = { id: meeting.tabId };
+    currentRoomKey = meeting.roomKey;
+    currentTitleKey = meeting.titleKey;
+    currentMeetingTitle = meeting.title;
     state = await VRMStorage.load();
 
     // Список другой встречи подставляется только когда терять нечего.
