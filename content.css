@@ -68,6 +68,30 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Пока показаны данные прошлой проверки, блок остаётся на месте — рядом со
+   счётчиком крутится значок обновления. */
+#vrm-attendance-missing .vrm-refreshing {
+  display: none;
+  margin-left: 5px;
+  color: #748287;
+  font-size: 11px;
+  line-height: 1;
+}
+
+#vrm-attendance-missing.vrm-is-stale .vrm-refreshing,
+#vrm-attendance-missing.vrm-is-refreshing .vrm-refreshing {
+  display: inline-block;
+  animation: vrm-spin 1.1s linear infinite;
+}
+
+@keyframes vrm-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #vrm-attendance-missing .vrm-refreshing { animation: none; }
+}
+
 #vrm-attendance-missing .vrm-roster-name {
   min-width: 0;
   margin-left: 7px;
