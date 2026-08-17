@@ -122,6 +122,62 @@ textarea {
   white-space: nowrap;
 }
 
+.mode-label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Режимы взаимоисключающие, поэтому переключатель — один тумблер на всю
+   ширину, а не две независимые галочки. */
+.mode-switch {
+  display: flex;
+  margin-bottom: 13px;
+  border: 1px solid #ccd4d7;
+  border-radius: 9px;
+  padding: 3px;
+  background: #eef2f3;
+}
+
+.mode-option {
+  flex: 1;
+  min-height: 32px;
+  border-radius: 7px;
+  color: #44535a;
+  background: transparent;
+  font: 700 13px/1 inherit;
+}
+
+.mode-option:hover:not(.is-active) { background: #e0e6e8; }
+
+.mode-option.is-active {
+  color: #fff;
+  background: #20a66a;
+  box-shadow: 0 1px 3px rgba(23, 139, 88, 0.35);
+}
+
+.mode-panel { margin-bottom: 13px; }
+
+.mm-session {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 12px;
+  color: #12643f;
+  font-size: 11px;
+}
+
+.mm-session span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mm-session .text-button { margin: 0; flex: 0 0 auto; }
+
 .mm-setting { margin: 0 0 13px; }
 
 .mm-fields {

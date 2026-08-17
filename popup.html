@@ -26,53 +26,58 @@
       <label for="roster-name">Название списка</label>
       <input id="roster-name" type="text" maxlength="80" placeholder="Например, еженедельный митап" />
 
-      <label class="room-binding mm-setting">
-        <input id="mm-enabled" type="checkbox" />
-        <span>Брать состав из канала Mattermost</span>
-      </label>
+      <span class="mode-label">Источник списка</span>
+      <div id="mode-switch" class="mode-switch" role="radiogroup" aria-label="Источник списка">
+        <button id="mode-mattermost" class="mode-option" type="button" role="radio" aria-checked="true">Mattermost</button>
+        <button id="mode-manual" class="mode-option" type="button" role="radio" aria-checked="false">Вручную</button>
+      </div>
 
-      <section id="mm-fields" class="mm-fields" hidden>
+      <section id="mm-fields" class="mode-panel mm-fields">
         <label for="mm-url">Адрес Mattermost</label>
         <div class="inline-row">
           <input id="mm-url" type="url" spellcheck="false" placeholder="https://mattermost.example.com" />
           <button id="mm-connect" class="secondary" type="button">Войти</button>
         </div>
+        <div id="mm-session" class="mm-session" hidden>
+          <span id="mm-session-text"></span>
+          <button id="mm-forget" class="text-button" type="button">Сменить сервер</button>
+        </div>
         <label for="mm-team">Команда</label>
         <select id="mm-team" disabled></select>
         <label for="mm-channel">Канал</label>
         <select id="mm-channel" disabled></select>
-        <button id="mm-load" class="secondary wide" type="button" disabled>Загрузить участников канала</button>
         <p id="mm-info" class="hint"></p>
+        <label class="room-binding mm-setting">
+          <input id="mm-statuses" type="checkbox" />
+          <span>Показывать статусы из Mattermost</span>
+        </label>
       </section>
 
-      <label class="room-binding mm-setting">
-        <input id="mm-statuses" type="checkbox" />
-        <span>Показывать статусы из Mattermost</span>
-      </label>
+      <section id="manual-fields" class="mode-panel" hidden>
+        <label class="room-binding editor-mode-setting">
+          <input id="detailed-editor-toggle" type="checkbox" />
+          <span>Подробный редактор: имя, статус и псевдонимы</span>
+        </label>
 
-      <label class="room-binding editor-mode-setting">
-        <input id="detailed-editor-toggle" type="checkbox" />
-        <span>Подробный редактор: имя, статус и псевдонимы</span>
-      </label>
+        <section id="detailed-editor" hidden>
+          <div class="field-row detailed-heading">
+            <span>Участники</span>
+            <button id="add-participant" class="text-button" type="button">+ Добавить</button>
+          </div>
+          <div id="participant-rows" class="participant-rows"></div>
+          <p class="hint">Статусы с конечной датой снимаются автоматически после её окончания.</p>
+        </section>
+      </section>
 
       <section id="simple-editor">
-        <label for="roster">Кого ждём</label>
+        <label for="roster" id="roster-label">Кого ждём</label>
         <textarea
           id="roster"
           rows="10"
           spellcheck="false"
           placeholder="Иван Иванов&#10;Мария Петрова&#10;Алексей Сидоров"
         ></textarea>
-        <p class="hint">По одному человеку на строку. Порядок имени и фамилии не важен.</p>
-      </section>
-
-      <section id="detailed-editor" hidden>
-        <div class="field-row detailed-heading">
-          <span>Участники</span>
-          <button id="add-participant" class="text-button" type="button">+ Добавить</button>
-        </div>
-        <div id="participant-rows" class="participant-rows"></div>
-        <p class="hint">Статусы с конечной датой снимаются автоматически после её окончания.</p>
+        <p class="hint" id="roster-hint">По одному человеку на строку. Порядок имени и фамилии не важен.</p>
       </section>
 
       <p id="room-label" class="room-label"></p>

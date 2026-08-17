@@ -150,6 +150,45 @@ check("логин уходит в псевдонимы", VRMattermost.memberAlia
 check("имя без профиля — логин",
   VRMattermost.displayName({ username: "nick", first_name: "", last_name: "" }), "nick");
 
+// --- режимы списка ----------------------------------------------------------
+
+check("список с каналом — режим Mattermost",
+  VRMeetups.rosterMode({ source: { type: "mattermost", channelId: "c1" } }), "mattermost");
+check("список без источника — ручной режим", VRMeetups.rosterMode({ source: null }), "manual");
+check("список без поля source — ручной режим", VRMeetups.rosterMode({}), "manual");
+check("чужой тип источника — ручной режим",
+  VRMeetups.rosterMode({ source: { type: "slack" } }), "manual");
+
+check("адрес по умолчанию проходит нормализацию без изменений",
+  VRMattermost.normalizeBaseUrl(VRMattermost.DEFAULT_BASE_URL), VRMattermost.DEFAULT_BASE_URL);
+
+// --- mattermost.js: кеш команд и каналов ------------------------------------
+
+const rawLists = {
+  teams: [
+    { id: "t1", name: "acme", displayName: "Acme", extra: "лишнее" },
+    { name: "без id" }
+  ],
+  channels: {
+    t1: [
+      { id: "c1", name: "vr2-backend-meeting", displayName: "vr2-backend-meeting", private: false },
+      { id: "", name: "пустой id" }
+    ],
+    "": [{ id: "c9" }],
+    t2: "не массив"
+  },
+  fetchedAt: 1234
+};
+const lists = VRMattermost.normalizeLists(rawLists);
+check("команды без id отбрасываются", lists.teams, [{ id: "t1", name: "acme", displayName: "Acme" }]);
+check("каналы приводятся к нужной форме",
+  lists.channels.t1,
+  [{ id: "c1", name: "vr2-backend-meeting", displayName: "vr2-backend-meeting", private: false }]);
+check("команда без id не попадает в кеш", Object.keys(lists.channels), ["t1"]);
+check("время загрузки сохраняется", lists.fetchedAt, 1234);
+check("пустой кеш не ломает", VRMattermost.normalizeLists(undefined), { teams: [], channels: {}, fetchedAt: 0 });
+check("повторная нормализация ничего не меняет", VRMattermost.normalizeLists(lists), lists);
+
 // --- mattermost.js: кастомные статусы --------------------------------------
 
 const now = Date.parse("2026-08-03T09:00:00Z");

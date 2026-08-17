@@ -186,6 +186,26 @@ const handlers = {
   },
   async VRM_MM_ACCESS({ baseUrl }) {
     return { granted: await hasAccess(baseUrl) };
+  },
+  // Состояние подключения одним запросом: выдан ли доступ к домену, есть ли
+  // сессионная кука и под кем мы вошли. Нужно, чтобы не показывать «Войти»
+  // тому, кто уже вошёл.
+  async VRM_MM_SESSION({ baseUrl }) {
+    const normalized = VRMattermost.normalizeBaseUrl(baseUrl);
+    const empty = { granted: false, hasSession: false, user: null };
+    if (!normalized || !(await hasAccess(normalized))) return empty;
+    if (!(await sessionToken(normalized))) return { ...empty, granted: true };
+
+    try {
+      const user = await request(normalized, "/users/me");
+      return {
+        granted: true,
+        hasSession: true,
+        user: { id: user.id, username: user.username, name: VRMattermost.displayName(user) }
+      };
+    } catch (_error) {
+      return { ...empty, granted: true };
+    }
   }
 };
 

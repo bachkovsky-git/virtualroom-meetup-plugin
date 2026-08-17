@@ -16,13 +16,19 @@
   const deleteButton = document.getElementById("delete-roster");
   const saveButton = document.getElementById("save");
   const statusBox = document.getElementById("status");
-  const mmEnabled = document.getElementById("mm-enabled");
+  const modeMattermost = document.getElementById("mode-mattermost");
+  const modeManual = document.getElementById("mode-manual");
+  const manualFields = document.getElementById("manual-fields");
+  const rosterLabel = document.getElementById("roster-label");
+  const rosterHint = document.getElementById("roster-hint");
+  const mmSession = document.getElementById("mm-session");
+  const mmSessionText = document.getElementById("mm-session-text");
+  const mmForget = document.getElementById("mm-forget");
   const mmFields = document.getElementById("mm-fields");
   const mmUrl = document.getElementById("mm-url");
   const mmConnect = document.getElementById("mm-connect");
   const mmTeam = document.getElementById("mm-team");
   const mmChannel = document.getElementById("mm-channel");
-  const mmLoad = document.getElementById("mm-load");
   const mmInfo = document.getElementById("mm-info");
   const mmStatuses = document.getElementById("mm-statuses");
 
@@ -42,6 +48,8 @@
   let draftSource = null;
   let mmTeams = [];
   let mmChannels = [];
+  let mmLists = { teams: [], channels: {} };
+  let draftMode = "mattermost";
 
   function showStatus(message, kind) {
     statusBox.textContent = message;
@@ -82,41 +90,116 @@
     if (selectedValue && items.some((item) => item.value === selectedValue)) select.value = selectedValue;
   }
 
-  function renderSource() {
-    const linked = Boolean(draftSource);
-    mmEnabled.checked = linked || mmEnabled.checked;
-    mmFields.hidden = !mmEnabled.checked;
-    rosterText.readOnly = linked;
-    rosterText.classList.toggle("readonly", linked);
-    mmLoad.disabled = !mmChannel.value;
-    if (linked) {
+  // Режимы взаимоисключающие, поэтому переключатель прячет один блок целиком
+  // и показывает другой — половинчатых состояний в интерфейсе не остаётся.
+  function isMattermostMode() {
+    return draftMode === "mattermost";
+  }
+
+  function detailedActive() {
+    return !isMattermostMode() && detailedToggle.checked;
+  }
+
+  function applyMode() {
+    const mattermost = isMattermostMode();
+    modeMattermost.setAttribute("aria-checked", String(mattermost));
+    modeManual.setAttribute("aria-checked", String(!mattermost));
+    modeMattermost.classList.toggle("is-active", mattermost);
+    modeManual.classList.toggle("is-active", !mattermost);
+    mmFields.hidden = !mattermost;
+    manualFields.hidden = mattermost;
+
+    // В режиме Mattermost состав приходит из канала: поле только для чтения,
+    // подсказка про «по одному на строку» здесь не нужна.
+    rosterText.readOnly = mattermost;
+    rosterText.classList.toggle("readonly", mattermost);
+    rosterLabel.textContent = mattermost ? "Состав канала" : "Кого ждём";
+    if (mattermost) {
+      const channel = draftSource?.channelDisplayName || draftSource?.channelName;
+      const people = VRMeetups.parseExpected(rosterText.value).length;
+      rosterHint.textContent = channel
+        ? `Канал «${channel}» — ${people} чел., состав обновляется автоматически.`
+        : "Выберите канал — состав загрузится сам.";
+    } else {
+      rosterHint.textContent = "По одному человеку на строку. Порядок имени и фамилии не важен.";
+    }
+
+    applyEditorMode();
+    if (mattermost && draftSource) {
       mmUrl.value = draftSource.baseUrl;
       const synced = draftSource.syncedAt
         ? new Date(draftSource.syncedAt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
         : "ещё не обновлялся";
-      mmSay(`Канал «${draftSource.channelDisplayName || draftSource.channelName}», обновлён: ${synced}.`);
-    } else if (!mmUrl.value) {
-      mmUrl.value = state.mattermostUrl || "";
+      mmSay(`Обновлён: ${synced}.`);
+    } else if (mattermost && !mmUrl.value) {
+      mmUrl.value = state.mattermostUrl || VRMattermost.DEFAULT_BASE_URL;
     }
   }
 
-  async function mmFillTeams(baseUrl, preferredTeamId) {
-    const { teams } = await mmSend({ type: "VRM_MM_TEAMS", baseUrl });
-    mmTeams = teams;
-    fillOptions(mmTeam, teams.map((team) => ({ value: team.id, label: team.displayName })), preferredTeamId, "Команд не найдено");
-    if (mmTeam.value) await mmFillChannels(baseUrl, mmTeam.value, draftSource?.channelId);
+  function setMode(mode) {
+    if (draftMode === mode) return;
+    draftMode = mode;
+    if (mode === "manual") {
+      draftSource = null;
+      mmSay("");
+    }
+    applyMode();
+    if (mode === "mattermost") mmPrepare();
   }
 
-  async function mmFillChannels(baseUrl, teamId, preferredChannelId) {
-    const { channels } = await mmSend({ type: "VRM_MM_CHANNELS", baseUrl, teamId });
+  function showTeams(teams, preferredTeamId) {
+    mmTeams = teams;
+    fillOptions(mmTeam, teams.map((team) => ({ value: team.id, label: team.displayName })), preferredTeamId, "Команды загружаются…");
+  }
+
+  function showChannels(channels, preferredChannelId) {
     mmChannels = channels;
     fillOptions(
       mmChannel,
       channels.map((channel) => ({ value: channel.id, label: `${channel.private ? "🔒 " : ""}${channel.displayName}` })),
       preferredChannelId,
-      "Каналов не найдено"
+      "Каналы загружаются…"
     );
-    mmLoad.disabled = !mmChannel.value;
+  }
+
+  // Сначала показываем то, что уже знаем: и выбранные ранее значения, и кеш
+  // прошлой загрузки. Так выпадающие списки не открываются пустыми.
+  function showCachedLists() {
+    const teamId = draftSource?.teamId || state.lastMattermostTeamId || "";
+    const channelId = draftSource?.channelId || state.lastMattermostChannelId || "";
+    const teams = mmLists.teams.length
+      ? mmLists.teams
+      : (draftSource?.teamId
+        ? [{ id: draftSource.teamId, name: draftSource.teamName, displayName: draftSource.teamName || draftSource.teamId }]
+        : []);
+    const channels = mmLists.channels[teamId]?.length
+      ? mmLists.channels[teamId]
+      : (draftSource?.channelId
+        ? [{
+          id: draftSource.channelId,
+          name: draftSource.channelName,
+          displayName: draftSource.channelDisplayName || draftSource.channelName,
+          private: false
+        }]
+        : []);
+    showTeams(teams, teamId);
+    showChannels(channels, channelId);
+  }
+
+  async function mmFillTeams(baseUrl, preferredTeamId) {
+    const { teams } = await mmSend({ type: "VRM_MM_TEAMS", baseUrl });
+    mmLists = await VRMStorage.saveLists({ ...mmLists, teams });
+    showTeams(teams, preferredTeamId || mmTeam.value);
+    if (mmTeam.value) await mmFillChannels(baseUrl, mmTeam.value, draftSource?.channelId || state.lastMattermostChannelId);
+  }
+
+  async function mmFillChannels(baseUrl, teamId, preferredChannelId) {
+    const { channels } = await mmSend({ type: "VRM_MM_CHANNELS", baseUrl, teamId });
+    mmLists = await VRMStorage.saveLists({
+      ...mmLists,
+      channels: { ...mmLists.channels, [teamId]: channels }
+    });
+    showChannels(channels, preferredChannelId || mmChannel.value);
   }
 
   async function mmConnectClick() {
@@ -157,7 +240,7 @@
       return;
     }
 
-    mmLoad.disabled = true;
+    mmChannel.disabled = true;
     mmSay("Читаю состав канала…");
     try {
       const source = {
@@ -180,13 +263,15 @@
         rowFromParticipant(name, { aliases: merged.aliases, statuses: existing?.statuses || {} })
       );
       if (!rosterName.value.trim()) rosterName.value = channel.displayName;
-      applyEditorMode();
-      renderSource();
+      state.lastMattermostTeamId = team.id;
+      state.lastMattermostChannelId = channel.id;
+      state = await VRMStorage.save(state);
+      applyMode();
       mmSay(`Загружено ${merged.participants.length} чел. из «${channel.displayName}». Не забудьте «Сохранить».`, "success");
     } catch (error) {
       mmSay(error.message, "error");
     } finally {
-      mmLoad.disabled = false;
+      mmChannel.disabled = false;
     }
   }
 
@@ -362,6 +447,13 @@
   }
 
   function applyEditorMode() {
+    // Подробный редактор имеет смысл только для ручного списка: в режиме
+    // Mattermost состав всё равно перезапишется каналом.
+    if (isMattermostMode()) {
+      simpleEditor.hidden = false;
+      detailedEditor.hidden = true;
+      return;
+    }
     detailedToggle.checked = state.detailedEditor === true;
     simpleEditor.hidden = detailedToggle.checked;
     detailedEditor.hidden = !detailedToggle.checked;
@@ -375,9 +467,8 @@
     detailedRows = (roster?.participants || []).map((name) => rowFromParticipant(name, roster));
     deleteButton.disabled = !roster;
     draftSource = roster?.source ? { ...roster.source } : null;
-    mmEnabled.checked = Boolean(draftSource);
-    applyEditorMode();
-    renderSource();
+    draftMode = roster ? VRMeetups.rosterMode(roster) : "mattermost";
+    applyMode();
   }
 
   function selectRoster(id) {
@@ -397,15 +488,16 @@
     detailedRows = [];
     deleteButton.disabled = true;
     draftSource = null;
-    mmEnabled.checked = false;
-    applyEditorMode();
-    renderSource();
+    // Новый список по умолчанию берётся из Mattermost.
+    draftMode = "mattermost";
+    applyMode();
+    mmPrepare();
     rosterName.focus();
     showStatus("Введите название и состав нового списка.", "success");
   }
 
   function collectRosterData(existing) {
-    const participants = state.detailedEditor
+    const participants = detailedActive()
       ? VRMeetups.parseExpected(detailedRows.map((row) => row.name).join("\n"))
       : VRMeetups.parseExpected(rosterText.value);
     const rowsByKey = new Map(detailedRows.map((row) => [VRMeetups.comparisonKey(row.name), row]));
@@ -434,6 +526,9 @@
   async function saveRoster(showConfirmation) {
     const name = rosterName.value.trim();
     if (!name) throw new Error("Введите название списка.");
+    if (isMattermostMode() && !draftSource) {
+      throw new Error("Выберите канал Mattermost или переключитесь на ручной список.");
+    }
     const existingIndex = state.rosters.findIndex((roster) => roster.id === draftId);
     const existing = state.rosters[existingIndex];
     const { participants, statuses, aliases } = collectRosterData(existing);
@@ -509,33 +604,73 @@
     currentTitleKey = VRMeetups.roomTitleKey(currentTab?.title || "");
     roomLabel.textContent = currentTab?.title || currentRoomKey || "Текущая вкладка";
     roomLabel.title = currentRoomKey;
-    state = await VRMStorage.load();
+    [state, mmLists] = await Promise.all([VRMStorage.load(), VRMStorage.loadLists()]);
     highlightPresent.checked = state.highlightPresent !== false;
     mmStatuses.checked = state.showMattermostStatuses !== false;
-    mmUrl.value = state.mattermostUrl || "";
+    mmUrl.value = state.mattermostUrl || VRMattermost.DEFAULT_BASE_URL;
     const activeRoster = VRMeetups.rosterForRoom(state, currentRoomKey, currentTitleKey);
     fillSelect(activeRoster?.id);
     showRoster(activeRoster);
     if (!activeRoster) startNewRoster();
-    if (draftSource) mmAutoConnect();
+    mmPrepare();
   }
 
-  // Если доступ к серверу уже выдан, списки команд и каналов подтягиваются
-  // молча — без повторного нажатия «Войти».
-  async function mmAutoConnect() {
-    const baseUrl = VRMattermost.normalizeBaseUrl(mmUrl.value || state.mattermostUrl);
+  // Состояние подключения решает, показывать ли «Войти»: тому, кто уже вошёл,
+  // кнопка не нужна.
+  function showSession(session) {
+    const connected = Boolean(session?.granted && session?.hasSession);
+    mmConnect.hidden = connected;
+    mmSession.hidden = !connected;
+    if (connected) {
+      mmSessionText.textContent = `Подключено как ${session.user?.name || session.user?.username || "—"}`;
+    }
+    return connected;
+  }
+
+  // Всё, что нужно режиму Mattermost: мгновенно показать известное, затем
+  // молча обновить в фоне.
+  async function mmPrepare() {
+    if (!isMattermostMode()) return;
+    if (!mmUrl.value) mmUrl.value = state.mattermostUrl || VRMattermost.DEFAULT_BASE_URL;
+    showCachedLists();
+
+    const baseUrl = VRMattermost.normalizeBaseUrl(mmUrl.value);
     if (!baseUrl) return;
-    const access = await chrome.runtime.sendMessage({ type: "VRM_MM_ACCESS", baseUrl });
-    if (!access?.granted) {
-      mmSay("Нажмите «Войти», чтобы разрешить расширению читать этот сервер.");
+    let session = null;
+    try {
+      session = await chrome.runtime.sendMessage({ type: "VRM_MM_SESSION", baseUrl });
+    } catch (_error) {
+      return;
+    }
+    if (!showSession(session)) {
+      mmSay(session?.granted
+        ? "Откройте Mattermost в этом браузере и войдите — потом вернитесь сюда."
+        : "Нажмите «Войти», чтобы разрешить расширению читать этот сервер.");
       return;
     }
     try {
-      await mmFillTeams(baseUrl, draftSource?.teamId || mmTeam.value);
-      if (!draftSource) mmSay("Выберите команду и канал.");
+      await mmFillTeams(baseUrl, draftSource?.teamId || state.lastMattermostTeamId);
+      if (!draftSource) mmSay("Выберите команду и канал — состав загрузится сам.");
     } catch (error) {
       mmSay(error.message, "error");
     }
+  }
+
+  // «Сменить сервер» просто забывает адрес: доступ к домену остаётся, можно
+  // сразу ввести другой сервер.
+  async function forgetServer() {
+    state.mattermostUrl = "";
+    state.lastMattermostTeamId = "";
+    state.lastMattermostChannelId = "";
+    state = await VRMStorage.save(state);
+    mmLists = await VRMStorage.saveLists({ teams: [], channels: {} });
+    mmUrl.value = "";
+    mmSession.hidden = true;
+    mmConnect.hidden = false;
+    showTeams([], "");
+    showChannels([], "");
+    mmSay("Адрес забыт. Введите другой сервер и нажмите «Войти».");
+    mmUrl.focus();
   }
 
   rosterSelect.addEventListener("change", () => selectRoster(rosterSelect.value));
@@ -559,24 +694,23 @@
   });
   deleteButton.addEventListener("click", () => deleteRoster().catch((error) => showStatus(error.message, "error")));
   saveButton.addEventListener("click", () => saveRoster(true).catch((error) => showStatus(error.message, "error")));
-  mmEnabled.addEventListener("change", () => {
-    mmFields.hidden = !mmEnabled.checked;
-    if (mmEnabled.checked) {
-      if (!mmUrl.value) mmUrl.value = state.mattermostUrl || "";
-      mmAutoConnect();
-    } else {
-      draftSource = null;
-      renderSource();
-      mmSay("Список снова редактируется вручную. Нажмите «Сохранить».");
-    }
+  modeMattermost.addEventListener("click", () => setMode("mattermost"));
+  modeManual.addEventListener("click", () => {
+    setMode("manual");
+    mmSay("");
+    showStatus("Список ведётся вручную. Не забудьте «Сохранить».", "success");
   });
   mmConnect.addEventListener("click", mmConnectClick);
+  mmForget.addEventListener("click", () => forgetServer().catch((error) => mmSay(error.message, "error")));
   mmTeam.addEventListener("change", () => {
-    mmFillChannels(VRMattermost.normalizeBaseUrl(mmUrl.value), mmTeam.value, draftSource?.channelId)
+    showChannels([], "");
+    mmFillChannels(VRMattermost.normalizeBaseUrl(mmUrl.value), mmTeam.value, "")
       .catch((error) => mmSay(error.message, "error"));
   });
-  mmChannel.addEventListener("change", () => { mmLoad.disabled = !mmChannel.value; });
-  mmLoad.addEventListener("click", mmLoadMembers);
+  // Состав грузится сам при выборе канала — отдельной кнопки больше нет.
+  mmChannel.addEventListener("change", () => {
+    if (mmChannel.value) mmLoadMembers();
+  });
   mmStatuses.addEventListener("change", async () => {
     state.showMattermostStatuses = mmStatuses.checked;
     state = await VRMStorage.save(state);

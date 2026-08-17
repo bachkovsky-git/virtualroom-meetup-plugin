@@ -61,6 +61,12 @@
     return (rosters || []).find((roster) => roster.id === id) || null;
   }
 
+  // Режимы взаимоисключающие: либо состав и статусы приходят из канала
+  // Mattermost, либо список ведётся руками. Признак — привязка к каналу.
+  function rosterMode(roster) {
+    return roster?.source?.type === "mattermost" ? "mattermost" : "manual";
+  }
+
   // Запасной ключ встречи: у части систем адрес комнаты каждый раз новый,
   // и тогда привязку спасает название из заголовка вкладки. Счётчик
   // непрочитанного и хвост с названием приложения отбрасываются.
@@ -245,6 +251,7 @@
     initials,
     roomKey,
     rosterById,
+    rosterMode,
     roomTitleKey,
     assignedRoster,
     rosterForRoom,

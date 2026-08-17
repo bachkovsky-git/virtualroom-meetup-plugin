@@ -11,6 +11,8 @@
     "detailedEditor",
     "mattermostUrl",
     "showMattermostStatuses",
+    "lastMattermostTeamId",
+    "lastMattermostChannelId",
     "expectedParticipants",
     "rosterText"
   ];
@@ -133,7 +135,9 @@
       missingCollapsed: stored.missingCollapsed === true,
       detailedEditor: stored.detailedEditor === true,
       mattermostUrl: VRMattermost.normalizeBaseUrl(stored.mattermostUrl),
-      showMattermostStatuses: stored.showMattermostStatuses !== false
+      showMattermostStatuses: stored.showMattermostStatuses !== false,
+      lastMattermostTeamId: String(stored.lastMattermostTeamId || ""),
+      lastMattermostChannelId: String(stored.lastMattermostChannelId || "")
     };
     const sanitized = Array.isArray(stored.rosters) && JSON.stringify(stored.rosters) !== JSON.stringify(rosters);
     if (migrated || sanitized) await save(state);
@@ -157,6 +161,8 @@
       detailedEditor: state.detailedEditor === true,
       mattermostUrl: VRMattermost.normalizeBaseUrl(state.mattermostUrl),
       showMattermostStatuses: state.showMattermostStatuses !== false,
+      lastMattermostTeamId: String(state.lastMattermostTeamId || ""),
+      lastMattermostChannelId: String(state.lastMattermostChannelId || ""),
       // These two fields keep version 1.0 data compatible during an update.
       expectedParticipants: selected?.participants || [],
       rosterText: (selected?.participants || []).join("\n")
@@ -185,5 +191,20 @@
     return pruned;
   }
 
-  root.VRMStorage = { load, save, newId, loadResults, saveResult };
+  // Команды и каналы Mattermost: кеш нужен, чтобы выпадающие списки не
+  // открывались пустыми, пока идёт запрос.
+  const LISTS_KEY = "mmLists";
+
+  async function loadLists() {
+    const stored = await chrome.storage.local.get(LISTS_KEY);
+    return VRMattermost.normalizeLists(stored[LISTS_KEY]);
+  }
+
+  async function saveLists(lists) {
+    const normalized = VRMattermost.normalizeLists({ ...lists, fetchedAt: Date.now() });
+    await chrome.storage.local.set({ [LISTS_KEY]: normalized });
+    return normalized;
+  }
+
+  root.VRMStorage = { load, save, newId, loadResults, saveResult, loadLists, saveLists };
 })(typeof globalThis !== "undefined" ? globalThis : window);

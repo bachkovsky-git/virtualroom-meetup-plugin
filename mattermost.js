@@ -176,6 +176,37 @@
 
   const NO_EXPIRY = /^0001-01-01/;
 
+  // Адрес по умолчанию: в большинстве случаев вводить его руками не нужно.
+  const DEFAULT_BASE_URL = "https://matter.organization.ru";
+
+  // Кеш команд и каналов переживает закрытие окна, поэтому его форму нужно
+  // проверять и на чтении, и на записи.
+  function normalizeLists(raw) {
+    const teams = (Array.isArray(raw?.teams) ? raw.teams : [])
+      .filter((team) => team?.id)
+      .map((team) => ({
+        id: String(team.id),
+        name: String(team.name || ""),
+        displayName: String(team.displayName || team.name || team.id)
+      }));
+
+    const channels = {};
+    Object.entries(raw?.channels || {}).forEach(([teamId, list]) => {
+      if (!teamId || !Array.isArray(list)) return;
+      const cleaned = list
+        .filter((channel) => channel?.id)
+        .map((channel) => ({
+          id: String(channel.id),
+          name: String(channel.name || ""),
+          displayName: String(channel.displayName || channel.name || channel.id),
+          private: channel.private === true
+        }));
+      if (cleaned.length) channels[String(teamId)] = cleaned;
+    });
+
+    return { teams, channels, fetchedAt: Number(raw?.fetchedAt) || 0 };
+  }
+
   function apiUrl(baseUrl, path) {
     return `${String(baseUrl || "").replace(/\/+$/, "")}/api/v4${path}`;
   }
@@ -389,6 +420,8 @@
   root.VRMattermost = {
     EMOJI,
     KIND_RULES,
+    DEFAULT_BASE_URL,
+    normalizeLists,
     apiUrl,
     originOf,
     normalizeBaseUrl,
