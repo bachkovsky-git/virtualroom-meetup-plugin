@@ -50,6 +50,10 @@
   let mmChannels = [];
   let mmLists = { teams: [], channels: {} };
   let draftMode = "mattermost";
+  // Выбор канала не выбрасывается при уходе в ручной режим: пользователь
+  // может передумать, и возвращаться к пустым спискам неприятно.
+  let stashedSource = null;
+  let mmListsReady = false;
 
   function showStatus(message, kind) {
     statusBox.textContent = message;
@@ -140,11 +144,19 @@
     if (draftMode === mode) return;
     draftMode = mode;
     if (mode === "manual") {
+      // Привязка к каналу откладывается в сторону, а не удаляется: сохранение
+      // в ручном режиме всё равно запишет список без источника.
+      stashedSource = draftSource;
       draftSource = null;
       mmSay("");
+      applyMode();
+      return;
     }
+    draftSource = draftSource || stashedSource;
     applyMode();
-    if (mode === "mattermost") mmPrepare();
+    // Команда и канал уже загружены в этом окне — не дёргаем сеть заново
+    // и не сбрасываем выбор.
+    if (!mmListsReady) mmPrepare();
   }
 
   function showTeams(teams, preferredTeamId) {
@@ -165,8 +177,8 @@
   // Сначала показываем то, что уже знаем: и выбранные ранее значения, и кеш
   // прошлой загрузки. Так выпадающие списки не открываются пустыми.
   function showCachedLists() {
-    const teamId = draftSource?.teamId || state.lastMattermostTeamId || "";
-    const channelId = draftSource?.channelId || state.lastMattermostChannelId || "";
+    const teamId = mmTeam.value || draftSource?.teamId || state.lastMattermostTeamId || "";
+    const channelId = mmChannel.value || draftSource?.channelId || state.lastMattermostChannelId || "";
     const teams = mmLists.teams.length
       ? mmLists.teams
       : (draftSource?.teamId
@@ -190,6 +202,7 @@
     const { teams } = await mmSend({ type: "VRM_MM_TEAMS", baseUrl });
     mmLists = await VRMStorage.saveLists({ ...mmLists, teams });
     showTeams(teams, preferredTeamId || mmTeam.value);
+    mmListsReady = teams.length > 0;
     if (mmTeam.value) await mmFillChannels(baseUrl, mmTeam.value, draftSource?.channelId || state.lastMattermostChannelId);
   }
 
@@ -467,6 +480,7 @@
     detailedRows = (roster?.participants || []).map((name) => rowFromParticipant(name, roster));
     deleteButton.disabled = !roster;
     draftSource = roster?.source ? { ...roster.source } : null;
+    stashedSource = null;
     draftMode = roster ? VRMeetups.rosterMode(roster) : "mattermost";
     applyMode();
   }
@@ -488,6 +502,7 @@
     detailedRows = [];
     deleteButton.disabled = true;
     draftSource = null;
+    stashedSource = null;
     // Новый список по умолчанию берётся из Mattermost.
     draftMode = "mattermost";
     applyMode();
@@ -649,7 +664,7 @@
       return;
     }
     try {
-      await mmFillTeams(baseUrl, draftSource?.teamId || state.lastMattermostTeamId);
+      if (!mmListsReady) await mmFillTeams(baseUrl, draftSource?.teamId || state.lastMattermostTeamId);
       if (!draftSource) mmSay("Выберите команду и канал — состав загрузится сам.");
     } catch (error) {
       mmSay(error.message, "error");
@@ -664,6 +679,8 @@
     state.lastMattermostChannelId = "";
     state = await VRMStorage.save(state);
     mmLists = await VRMStorage.saveLists({ teams: [], channels: {} });
+    stashedSource = null;
+    mmListsReady = false;
     mmUrl.value = "";
     mmSession.hidden = true;
     mmConnect.hidden = false;
@@ -702,14 +719,22 @@
   });
   mmConnect.addEventListener("click", mmConnectClick);
   mmForget.addEventListener("click", () => forgetServer().catch((error) => mmSay(error.message, "error")));
-  mmTeam.addEventListener("change", () => {
-    showChannels([], "");
+  mmTeam.addEventListener("change", async () => {
+    state.lastMattermostTeamId = mmTeam.value;
+    state.lastMattermostChannelId = "";
+    state = await VRMStorage.save(state);
+    // Каналы прошлой команды показывать нельзя, но если для новой они уже
+    // в кеше — покажем их сразу, без пустого списка.
+    showChannels(mmLists.channels[mmTeam.value] || [], "");
     mmFillChannels(VRMattermost.normalizeBaseUrl(mmUrl.value), mmTeam.value, "")
       .catch((error) => mmSay(error.message, "error"));
   });
   // Состав грузится сам при выборе канала — отдельной кнопки больше нет.
-  mmChannel.addEventListener("change", () => {
-    if (mmChannel.value) mmLoadMembers();
+  mmChannel.addEventListener("change", async () => {
+    if (!mmChannel.value) return;
+    state.lastMattermostChannelId = mmChannel.value;
+    state = await VRMStorage.save(state);
+    mmLoadMembers();
   });
   mmStatuses.addEventListener("change", async () => {
     state.showMattermostStatuses = mmStatuses.checked;
