@@ -443,7 +443,7 @@
     const button = document.createElement("button");
     button.type = "button";
     button.className = "vrm-settings-button";
-    button.title = "Настроить список в панели расширения";
+    button.title = "Настроить список в окне расширения";
     button.setAttribute("aria-label", button.title);
     button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="${GEAR_PATH}" clip-rule="evenodd"></path></svg>`;
     button.addEventListener("click", (event) => {
@@ -1023,8 +1023,8 @@
     panel.listContainer.insertBefore(section, panel.scroller);
   }
 
-  // Редактор списков живёт в боковой панели расширения: своего окна на
-  // странице больше нет.
+  // Редактор списков живёт в окне расширения — том же, что открывает значок.
+  // Своего окна на странице больше нет.
   async function openEditor(options) {
     closeStatusMenu();
     let response;
@@ -1036,7 +1036,7 @@
     if (response?.ok && !response.needsClick) return;
 
     // Сюда попадаем только если не открылось ни панель, ни окно.
-    editorHint = "Не удалось открыть редактор. Откройте панель по значку расширения — список уже выбран.";
+    editorHint = "Не удалось открыть редактор. Нажмите значок расширения — список уже выбран.";
     redrawBlock();
     clearTimeout(editorHintTimer);
     editorHintTimer = setTimeout(() => {

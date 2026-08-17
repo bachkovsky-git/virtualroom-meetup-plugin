@@ -170,11 +170,13 @@ async function getSnapshot(source, force) {
   }
 }
 
-// Куда показать редактор. Порядок важен: если панель уже открыта, она сама
-// подхватит намерение из хранилища, и открывать ничего не нужно.
+// Редактор всегда открывается одним и тем же способом — отдельным окном, и
+// со значка расширения, и по шестерёнке на странице. Боковая панель не
+// подходит: Chrome разрешает открывать её только по жесту внутри расширения,
+// поэтому со страницы она была недоступна, и поведение расходилось.
 let editorWindowId = null;
 
-async function panelIsOpen() {
+async function editorIsOpen() {
   try {
     const response = await chrome.runtime.sendMessage({ type: "VRM_PANEL_PING" });
     return response?.ok === true;
@@ -194,21 +196,13 @@ async function focusEditorWindow() {
   }
 }
 
-async function openEditorSurface(windowId) {
-  if (await panelIsOpen()) return { opened: true, surface: "panel" };
+async function openEditorSurface() {
+  // Окно редактора уже открыто — просто выводим его вперёд. Намерение оно
+  // подхватит из хранилища само.
   if (await focusEditorWindow()) return { opened: true, surface: "window" };
-
-  // Chrome разрешает открыть боковую панель только по жесту внутри самого
-  // расширения, а клик по шестерёнке живёт на странице. Пробуем — вдруг
-  // жест зачтётся, — и сразу готовим запасной путь.
-  if (chrome.sidePanel?.open && windowId !== undefined) {
-    try {
-      await chrome.sidePanel.open({ windowId });
-      return { opened: true, surface: "panel" };
-    } catch (_error) {
-      // Ожидаемо: жеста нет. Открываем окно.
-    }
-  }
+  // Отвечает, но окна мы не знаем (например, после перезапуска воркера) —
+  // второе окно плодить не нужно.
+  if (await editorIsOpen()) return { opened: true, surface: "window" };
 
   try {
     const created = await chrome.windows.create({
@@ -249,11 +243,11 @@ const handlers = {
   // сохраняется всегда, а само открытие Chrome может отклонить, если сочтёт,
   // что жеста пользователя не было — тогда панель откроют значком, и намерение
   // применится там.
-  async VRM_OPEN_EDITOR({ rosterId, blank }, sender) {
+  async VRM_OPEN_EDITOR({ rosterId, blank }) {
     await chrome.storage.local.set({
       editorIntent: { rosterId: String(rosterId || ""), blank: blank === true, at: Date.now() }
     });
-    return openEditorSurface(sender?.tab?.windowId);
+    return openEditorSurface();
   },
   // Состояние подключения одним запросом: выдан ли доступ к домену, есть ли
   // сессионная кука и под кем мы вошли. Нужно, чтобы не показывать «Войти»
@@ -277,29 +271,9 @@ const handlers = {
   }
 };
 
-// Всплывающее окно расширения Chrome закрывает при любой потере фокуса, и
-// отключить это нельзя. Поэтому иконка открывает боковую панель: она живёт,
-// пока её не закроют, и переживает переключение окон и вкладок.
-function enableSidePanel() {
-  chrome.sidePanel?.setPanelBehavior?.({ openPanelOnActionClick: true }).catch(() => {});
-}
-
-chrome.runtime.onInstalled.addListener(enableSidePanel);
-chrome.runtime.onStartup.addListener(enableSidePanel);
-enableSidePanel();
-
-// Запасной путь для сборок без Side Panel API: то же окно настроек, но
-// отдельным окном браузера.
-if (!chrome.sidePanel) {
-  chrome.action.onClicked.addListener(() => {
-    chrome.windows.create({
-      url: chrome.runtime.getURL("popup.html"),
-      type: "popup",
-      width: 520,
-      height: 720
-    });
-  });
-}
+chrome.action.onClicked.addListener(() => {
+  openEditorSurface().catch(() => {});
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const handler = handlers[message?.type];
