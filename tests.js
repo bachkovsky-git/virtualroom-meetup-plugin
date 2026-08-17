@@ -53,6 +53,38 @@ check("просроченный статус снимается",
 check("статус в периоде активен",
   VRMeetups.statusIsActive({ type: "absent", from: "2026-07-01", until: "2026-07-05" }, "2026-07-03"), true);
 
+// --- common.js: откладывание проверки и отпечаток раздела -------------------
+
+const t0 = Date.parse("2026-08-03T12:00:00Z");
+check("скроллит прямо сейчас — ждём",
+  VRMeetups.shouldDeferScan({ now: t0, lastUserScrollAt: t0 - 300, waitingSince: t0 - 300 }), true);
+check("курсор над панелью — ждём",
+  VRMeetups.shouldDeferScan({ now: t0, hovered: true, waitingSince: t0 - 300 }), true);
+check("после тишины сканируем",
+  VRMeetups.shouldDeferScan({ now: t0, lastUserScrollAt: t0 - 2000, waitingSince: t0 - 2000 }), false);
+check("никто не трогал список — сканируем сразу",
+  VRMeetups.shouldDeferScan({ now: t0 }), false);
+check("дольше предела не ждём даже под курсором",
+  VRMeetups.shouldDeferScan({ now: t0, hovered: true, waitingSince: t0 - 11000 }), false);
+
+const rowsA = [{ name: "Иванов Иван", icon: "🌴", presence: "не в сети, 2 ч назад" }];
+const extrasA = { count: "1/11", roster: "Митап", collapsed: false, notice: "" };
+check("одинаковые данные — одинаковый отпечаток",
+  VRMeetups.missingSignature(rowsA, extrasA), VRMeetups.missingSignature(rowsA, extrasA));
+check("сменился статус — отпечаток другой",
+  VRMeetups.missingSignature([{ ...rowsA[0], icon: "🍔" }], extrasA) === VRMeetups.missingSignature(rowsA, extrasA),
+  false);
+check("сменилось присутствие — отпечаток другой",
+  VRMeetups.missingSignature([{ ...rowsA[0], presence: "в сети" }], extrasA) === VRMeetups.missingSignature(rowsA, extrasA),
+  false);
+check("добавился человек — отпечаток другой",
+  VRMeetups.missingSignature([...rowsA, { name: "Петрова Мария", icon: "", presence: "" }], extrasA) ===
+    VRMeetups.missingSignature(rowsA, extrasA),
+  false);
+check("свернули раздел — отпечаток другой",
+  VRMeetups.missingSignature(rowsA, { ...extrasA, collapsed: true }) === VRMeetups.missingSignature(rowsA, extrasA),
+  false);
+
 // --- mattermost.js: адрес и имена ------------------------------------------
 
 check("адрес без схемы", VRMattermost.normalizeBaseUrl("mm.example.com"), "https://mm.example.com");
@@ -108,11 +140,14 @@ check("срок статуса на сегодня", VRMattermost.formatExpiry(n
 
 // --- mattermost.js: состав канала ------------------------------------------
 
+// Время передаётся явно: иначе проверки ломались бы, как только срок статуса
+// в тестовых данных истечёт по календарю.
 const members = [
-  VRMattermost.memberFromUser(user, { status: "offline", last_activity_at: now - 3600000 }),
+  VRMattermost.memberFromUser(user, { status: "offline", last_activity_at: now - 3600000 }, now),
   VRMattermost.memberFromUser(
     { id: "u2", username: "lipanti.nick", first_name: "Липатников", last_name: "Никита", props: {} },
-    { status: "online" }
+    { status: "online" },
+    now
   )
 ];
 check("описание участника",
