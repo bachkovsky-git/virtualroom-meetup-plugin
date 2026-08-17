@@ -857,6 +857,14 @@
     rosterName.select();
   }
 
+  // Фон спрашивает, открыт ли редактор: если да, второе окно не нужно —
+  // намерение и так прилетит через хранилище.
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "VRM_PANEL_PING") return undefined;
+    sendResponse({ ok: true });
+    return false;
+  });
+
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
     if (changes.editorIntent?.newValue) {

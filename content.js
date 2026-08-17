@@ -1035,7 +1035,8 @@
     }
     if (response?.ok && !response.needsClick) return;
 
-    editorHint = "Откройте панель расширения по значку — редактор уже готов.";
+    // Сюда попадаем только если не открылось ни панель, ни окно.
+    editorHint = "Не удалось открыть редактор. Откройте панель по значку расширения — список уже выбран.";
     redrawBlock();
     clearTimeout(editorHintTimer);
     editorHintTimer = setTimeout(() => {

@@ -170,6 +170,64 @@ async function getSnapshot(source, force) {
   }
 }
 
+// Куда показать редактор. Порядок важен: если панель уже открыта, она сама
+// подхватит намерение из хранилища, и открывать ничего не нужно.
+let editorWindowId = null;
+
+async function panelIsOpen() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "VRM_PANEL_PING" });
+    return response?.ok === true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function focusEditorWindow() {
+  if (editorWindowId === null) return false;
+  try {
+    await chrome.windows.update(editorWindowId, { focused: true, drawAttention: true });
+    return true;
+  } catch (_error) {
+    editorWindowId = null;
+    return false;
+  }
+}
+
+async function openEditorSurface(windowId) {
+  if (await panelIsOpen()) return { opened: true, surface: "panel" };
+  if (await focusEditorWindow()) return { opened: true, surface: "window" };
+
+  // Chrome разрешает открыть боковую панель только по жесту внутри самого
+  // расширения, а клик по шестерёнке живёт на странице. Пробуем — вдруг
+  // жест зачтётся, — и сразу готовим запасной путь.
+  if (chrome.sidePanel?.open && windowId !== undefined) {
+    try {
+      await chrome.sidePanel.open({ windowId });
+      return { opened: true, surface: "panel" };
+    } catch (_error) {
+      // Ожидаемо: жеста нет. Открываем окно.
+    }
+  }
+
+  try {
+    const created = await chrome.windows.create({
+      url: chrome.runtime.getURL("popup.html"),
+      type: "popup",
+      width: 520,
+      height: 760
+    });
+    editorWindowId = created?.id ?? null;
+    return { opened: true, surface: "window" };
+  } catch (error) {
+    return { opened: false, needsClick: true, message: error.message };
+  }
+}
+
+chrome.windows?.onRemoved?.addListener((closedId) => {
+  if (closedId === editorWindowId) editorWindowId = null;
+});
+
 const handlers = {
   async VRM_MM_CONNECT({ baseUrl }) {
     const user = await request(baseUrl, "/users/me");
@@ -195,15 +253,7 @@ const handlers = {
     await chrome.storage.local.set({
       editorIntent: { rosterId: String(rosterId || ""), blank: blank === true, at: Date.now() }
     });
-
-    const windowId = sender?.tab?.windowId;
-    if (!chrome.sidePanel?.open || windowId === undefined) return { opened: false, needsClick: true };
-    try {
-      await chrome.sidePanel.open({ windowId });
-      return { opened: true };
-    } catch (_error) {
-      return { opened: false, needsClick: true };
-    }
+    return openEditorSurface(sender?.tab?.windowId);
   },
   // Состояние подключения одним запросом: выдан ли доступ к домену, есть ли
   // сессионная кука и под кем мы вошли. Нужно, чтобы не показывать «Войти»
