@@ -752,7 +752,10 @@
     menu.querySelector(focusSelector)?.focus();
 
     statusMenuOutsideHandler = (event) => {
-      if (!menu.contains(event.target) && event.target !== anchor) closeStatusMenu();
+      // Кнопка состоит из вложенных элементов, поэтому проверяем всё её
+      // поддерево: иначе клик по имени списка закрывал меню, а следом
+      // обработчик кнопки открывал его снова — выглядело как моргание.
+      if (!menu.contains(event.target) && !anchor.contains(event.target)) closeStatusMenu();
     };
     setTimeout(() => {
       if (document.getElementById(STATUS_MENU_ID) === menu && statusMenuOutsideHandler) {
