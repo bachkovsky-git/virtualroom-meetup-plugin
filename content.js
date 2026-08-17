@@ -865,33 +865,30 @@
     text.textContent = state.rosters.length
       ? "Выберите, кого ждём на этой встрече — список запомнится для неё."
       : "Создайте список тех, кого ждём на этой встрече.";
+    // Одна кнопка: создание нового списка — последний пункт того же меню,
+    // а когда списков ещё нет, она сразу открывает редактор.
     const buttons = document.createElement("div");
     buttons.className = "vrm-prompt-actions";
-
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "vrm-prompt-button";
     if (state.rosters.length) {
-      const choose = document.createElement("button");
-      choose.type = "button";
-      choose.className = "vrm-prompt-button vrm-prompt-choose";
-      choose.textContent = "Выбрать список ▾";
-      choose.setAttribute("aria-haspopup", "menu");
-      choose.addEventListener("click", (event) => {
+      action.textContent = "Выбрать список ▾";
+      action.setAttribute("aria-haspopup", "menu");
+      action.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        showRosterMenu(choose);
+        showRosterMenu(action);
       });
-      buttons.append(choose);
+    } else {
+      action.textContent = "Создать список";
+      action.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showRosterPicker({ blank: true });
+      });
     }
-
-    const create = document.createElement("button");
-    create.type = "button";
-    create.className = "vrm-prompt-button";
-    create.textContent = "+ Создать новый";
-    create.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      showRosterPicker({ blank: true });
-    });
-    buttons.append(create);
+    buttons.append(action);
 
     body.append(text, buttons);
     const delimiter = document.createElement("div");
