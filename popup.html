@@ -21,7 +21,6 @@
         <button id="new-roster" class="text-button" type="button">+ Новый</button>
       </div>
       <select id="roster-select" aria-label="Выберите список"></select>
-      <p id="roster-summary" class="hint roster-summary"></p>
 
       <label for="roster-name">Название списка</label>
       <input id="roster-name" type="text" maxlength="80" placeholder="Например, еженедельный митап" />
@@ -76,7 +75,10 @@
       </section>
 
       <section id="simple-editor">
-        <label for="roster" id="roster-label">Кого ждём</label>
+        <div class="field-row">
+          <label for="roster" id="roster-label">Кого ждём</label>
+          <span id="roster-count" class="roster-count"></span>
+        </div>
         <textarea
           id="roster"
           rows="10"
@@ -85,8 +87,6 @@
         ></textarea>
         <p class="hint" id="roster-hint">По одному человеку на строку. Порядок имени и фамилии не важен.</p>
       </section>
-
-      <p id="room-label" class="room-label"></p>
 
       <label class="room-binding highlight-setting">
         <input id="highlight-present" type="checkbox" />

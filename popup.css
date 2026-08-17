@@ -115,15 +115,13 @@ textarea {
 }
 
 .room-binding input { margin: 1px 0 0; accent-color: #20a66a; }
-.roster-summary { margin: -8px 0 13px; }
 
-.room-label {
-  margin: 5px 0 13px 22px;
-  overflow: hidden;
-  color: #7a888e;
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.roster-count {
+  flex: 0 0 auto;
+  margin-bottom: 7px;
+  color: #718087;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .mode-label {

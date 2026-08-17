@@ -9,8 +9,7 @@
   const detailedToggle = document.getElementById("detailed-editor-toggle");
   const participantRows = document.getElementById("participant-rows");
   const addParticipantButton = document.getElementById("add-participant");
-  const roomLabel = document.getElementById("room-label");
-  const rosterSummary = document.getElementById("roster-summary");
+  const rosterCount = document.getElementById("roster-count");
   const aliasesBlock = document.getElementById("aliases-block");
   const aliasesList = document.getElementById("aliases-list");
   const highlightPresent = document.getElementById("highlight-present");
@@ -123,15 +122,12 @@
     rosterText.readOnly = mattermost;
     rosterText.classList.toggle("readonly", mattermost);
     rosterLabel.textContent = mattermost ? "Состав канала" : "Кого ждём";
-    if (mattermost) {
-      const channel = draftSource?.channelDisplayName || draftSource?.channelName;
-      const people = VRMeetups.parseExpected(rosterText.value).length;
-      rosterHint.textContent = channel
-        ? `Канал «${channel}» — ${people} чел., состав обновляется автоматически.`
-        : "Выберите канал — состав загрузится сам.";
-    } else {
-      rosterHint.textContent = "По одному человеку на строку. Порядок имени и фамилии не важен.";
-    }
+    // В режиме канала пояснять нечего: состав и так только для чтения.
+    rosterHint.hidden = mattermost;
+    rosterHint.textContent = mattermost
+      ? ""
+      : "По одному человеку на строку. Порядок имени и фамилии не важен.";
+    updateRosterCount();
 
     applyEditorMode();
     renderAliases();
@@ -307,19 +303,14 @@
     });
     if (selectedId && VRMeetups.rosterById(state.rosters, selectedId)) rosterSelect.value = selectedId;
     rosterSelect.disabled = state.rosters.length === 0;
-    showRosterSummary(VRMeetups.rosterById(state.rosters, selectedId));
+    updateRosterCount();
   }
 
-  function showRosterSummary(roster) {
-    if (!roster) {
-      rosterSummary.textContent = "Новый список ещё не сохранён.";
-      return;
-    }
-    // Привязка могла быть сделана и по названию встречи, а не только по адресу.
-    const bound = state.roomAssignments?.[currentRoomKey] === roster.id ||
-      (currentTitleKey && state.titleAssignments?.[currentTitleKey] === roster.id);
-    const people = `${roster.participants.length} чел.`;
-    rosterSummary.textContent = bound ? `${people} · запомнен для этой встречи` : people;
+  // Сколько человек в списке — видно в шапке самого списка, дублировать
+  // подписью под названием незачем.
+  function updateRosterCount() {
+    const people = VRMeetups.parseExpected(rosterText.value).length;
+    rosterCount.textContent = people ? `${people} чел.` : "";
   }
 
   function renderAliases() {
@@ -670,7 +661,7 @@
     try {
       const result = await chrome.tabs.sendMessage(currentTab.id, { type: "VRM_BIND_ROSTER", rosterId });
       if (result?.ok) state = await VRMStorage.load();
-      showRosterSummary(VRMeetups.rosterById(state.rosters, rosterId));
+      updateRosterCount();
       return Boolean(result?.ok);
     } catch (_error) {
       return false;
@@ -681,8 +672,6 @@
     currentTab = await getActiveTab();
     currentRoomKey = VRMeetups.roomKey(currentTab?.url || "");
     currentTitleKey = VRMeetups.roomTitleKey(currentTab?.title || "");
-    roomLabel.textContent = currentTab?.title || currentRoomKey || "Текущая вкладка";
-    roomLabel.title = currentRoomKey;
     [state, mmLists] = await Promise.all([VRMStorage.load(), VRMStorage.loadLists()]);
     highlightPresent.checked = state.highlightPresent !== false;
     mmStatuses.checked = state.showMattermostStatuses !== false;
@@ -715,8 +704,6 @@
     currentTab = tab;
     currentRoomKey = roomKey;
     currentTitleKey = titleKey;
-    roomLabel.textContent = tab.title || roomKey || "Текущая вкладка";
-    roomLabel.title = roomKey;
     state = await VRMStorage.load();
 
     // Список другой встречи подставляется только когда терять нечего.
@@ -725,7 +712,7 @@
       fillSelect(roster.id);
       showRoster(roster);
     } else {
-      showRosterSummary(VRMeetups.rosterById(state.rosters, draftId));
+      updateRosterCount();
     }
   }
 
@@ -808,6 +795,7 @@
     applyEditorMode();
     state = await VRMStorage.save(state);
   });
+  rosterText.addEventListener("input", updateRosterCount);
   deleteButton.addEventListener("click", () => deleteRoster().catch((error) => showStatus(error.message, "error")));
   saveButton.addEventListener("click", () => saveRoster(true).catch((error) => showStatus(error.message, "error")));
   modeMattermost.addEventListener("click", () => setMode("mattermost"));
