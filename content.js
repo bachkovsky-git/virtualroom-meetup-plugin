@@ -8,6 +8,7 @@
   const PICKER_ID = "vrm-roster-picker";
   const STATUS_MENU_ID = "vrm-attendance-status-menu";
   const GEAR_PATH = "m14.54 7.37 1.065-.58a.755.755 0 0 0 .366-.873c-.366-1.356-1.132-2.583-2.13-3.584-.266-.226-.666-.29-.965-.13l-1.065.614a4.5 4.5 0 0 0-1.098-.613V1.009c0-.355-.233-.646-.6-.743a8.5 8.5 0 0 0-4.226 0c-.366.097-.6.388-.6.743v1.195a4.5 4.5 0 0 0-1.098.613l-1.065-.613c-.3-.162-.699-.097-.965.129C1.161 3.334.395 4.561.03 5.917c-.1.355.067.71.366.872l1.065.581c-.033.226-.033.42-.033.646 0 .194 0 .388.033.581l-1.065.614a.755.755 0 0 0-.366.872c.366 1.356 1.132 2.583 2.13 3.584.266.226.666.29.965.13l1.065-.614c.333.258.7.452 1.099.613v1.195c0 .355.233.646.599.743a8.5 8.5 0 0 0 4.226 0c.367-.097.6-.388.6-.743v-1.195c.399-.161.765-.355 1.098-.613l1.065.613c.3.162.699.097.965-.129.998-1.001 1.764-2.228 2.13-3.584a.755.755 0 0 0-.366-.872l-1.065-.614a7.6 7.6 0 0 0 0-1.227m-1.764 2.067 1.464.807c-.266.678-.632 1.324-1.131 1.873l-1.465-.807c-1.065.872-1.198.968-2.53 1.42v1.647a6.4 6.4 0 0 1-2.229 0v-1.646c-1.331-.453-1.498-.55-2.53-1.421l-1.464.807c-.499-.549-.865-1.195-1.131-1.873l1.464-.807c-.266-1.356-.266-1.518 0-2.874L1.76 5.756c.266-.678.632-1.324 1.131-1.873l1.465.807c1.065-.872 1.198-.969 2.53-1.42V1.622a6.4 6.4 0 0 1 2.229 0v1.646c1.331.452 1.498.55 2.53 1.421l1.464-.807c.499.549.865 1.195 1.131 1.873l-1.464.807c.266 1.356.266 1.518 0 2.874m-4.76-4.553c-1.763 0-3.194 1.42-3.194 3.1 0 1.711 1.43 3.1 3.195 3.1 1.73 0 3.195-1.389 3.195-3.1 0-1.68-1.465-3.1-3.195-3.1m0 4.65c-.898 0-1.597-.678-1.597-1.55 0-.84.699-1.55 1.598-1.55.865 0 1.597.71 1.597 1.55 0 .872-.732 1.55-1.597 1.55";
+  const AUTO_SCAN_DELAY = 1200;
   const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
   let state = {
@@ -29,6 +30,12 @@
   let mmSnapshot = null;
   let mmNotice = "";
   let appliedSnapshotKey = "";
+  let lastRenderSignature = "";
+  let lastUserScrollAt = 0;
+  let panelHovered = false;
+  let programmaticScroll = false;
+  let autoScanWaitingSince = 0;
+  let watchedScroller = null;
 
   function currentRoomKey() {
     return VRMeetups.roomKey(location.href);
@@ -143,7 +150,7 @@
     const missing = activeRoster.participants.filter(
       (name) => !VRMeetups.participantIsPresent(activeRoster, name, actualNameKeys)
     );
-    renderResult(panel.scroller, missing);
+    renderResult(panel, missing);
     updatePresentMarkers();
     ignoreMutationsUntil = Date.now() + 1000;
   }
@@ -168,27 +175,57 @@
     return scroller ? { listContainer, scroller } : null;
   }
 
+  // Позиция возвращается в несколько проходов: виртуализация меняет высоту
+  // содержимого с задержкой, и одиночное присваивание scrollTop не держится.
+  async function restoreScrollTop(scroller, position) {
+    const apply = () => {
+      const limit = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      scroller.scrollTop = Math.min(position, limit);
+      scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
+    };
+    apply();
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    apply();
+    await wait(60);
+    apply();
+  }
+
   async function collectAllNames(scroller) {
     const namesByKey = new Map();
     const originalScrollTop = scroller.scrollTop;
     const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     const step = Math.max(48, Math.floor(scroller.clientHeight * 0.75));
+    const startedAt = Date.now();
 
     readNames(scroller, namesByKey);
-    if (maxScrollTop > 0) {
+    if (maxScrollTop <= 0) return namesByKey;
+
+    const previousBehavior = scroller.style.scrollBehavior;
+    scroller.style.scrollBehavior = "auto";
+    programmaticScroll = true;
+    // Пользователь мог начать листать уже после запуска проверки: тогда сбор
+    // прерывается на достигнутом и позиция остаётся его, а не нашей.
+    const interrupted = () => lastUserScrollAt > startedAt;
+    try {
       for (let position = 0, iterations = 0; position <= maxScrollTop && iterations < 500; position += step, iterations += 1) {
+        if (interrupted()) break;
         scroller.scrollTop = Math.min(position, maxScrollTop);
         scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
         await wait(70);
         readNames(scroller, namesByKey);
       }
-      scroller.scrollTop = maxScrollTop;
-      scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
-      await wait(90);
-      readNames(scroller, namesByKey);
-      scroller.scrollTop = Math.min(originalScrollTop, maxScrollTop);
-      scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
-      await wait(50);
+      if (!interrupted()) {
+        scroller.scrollTop = maxScrollTop;
+        scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
+        await wait(90);
+        readNames(scroller, namesByKey);
+        await restoreScrollTop(scroller, originalScrollTop);
+      }
+    } finally {
+      scroller.style.scrollBehavior = previousBehavior;
+      // События прокрутки приходят на следующих кадрах, поэтому флаг снимается
+      // с запасом — иначе наш же скролл сойдёт за пользовательский.
+      setTimeout(() => { programmaticScroll = false; }, 150);
     }
     return namesByKey;
   }
@@ -621,10 +658,37 @@
     placeStatusMenu(menu, anchor, '[aria-checked="true"]');
   }
 
-  function renderResult(scroller, missing) {
+  function missingRowData(name) {
+    const status = participantStatus(name);
+    const member = memberForName(name);
+    return {
+      name,
+      icon: status?.type || (member && VRMattermost.memberIcon(member)) || "",
+      presence: member ? VRMattermost.presence(member).short : ""
+    };
+  }
+
+  function renderResult(panel, missing) {
+    if (!activeRoster) {
+      document.getElementById(MISSING_ID)?.remove();
+      lastRenderSignature = "";
+      return;
+    }
+
+    const signature = VRMeetups.missingSignature(missing.map(missingRowData), {
+      count: `${missing.length}/${activeRoster.participants.length}`,
+      roster: activeRoster.name,
+      collapsed: state.missingCollapsed === true,
+      notice: mmNotice
+    });
+    const existing = document.getElementById(MISSING_ID);
+    // Пока показывать нечего нового, DOM не трогаем: иначе раздел мигает
+    // при каждой проверке и при обновлении статусов.
+    if (existing && existing.parentElement === panel.listContainer && signature === lastRenderSignature) return;
+    lastRenderSignature = signature;
+
     closeStatusMenu();
-    document.getElementById(MISSING_ID)?.remove();
-    if (!activeRoster) return;
+    existing?.remove();
 
     const section = document.createElement("section");
     section.id = MISSING_ID;
@@ -652,7 +716,7 @@
     if (VRMattermost.isMattermost(activeRoster)) actions.append(createMattermostButton());
     actions.append(createGearButton());
     header.append(createCollapseButton(section), label, count, rosterLabel, actions);
-    section.append(delimiter, header);
+    section.append(header);
 
     const body = document.createElement("div");
     body.className = "vrm-missing-body";
@@ -699,8 +763,13 @@
       });
     }
 
-    // The section becomes part of the same scroll flow as VirtualRoom rows.
-    scroller.append(section);
+    // Разделитель снизу: блок стоит над списком и отделяется от него.
+    section.append(delimiter);
+
+    // Блок закреплён над прокручиваемым списком, а не внутри него: до него не
+    // нужно листать, виртуализация VirtualRoom его не выкидывает, и его
+    // перерисовка больше не меняет высоту прокручиваемой области.
+    panel.listContainer.insertBefore(section, panel.scroller);
   }
 
   function closeRosterPicker() {
@@ -1014,7 +1083,6 @@
         return { ok: false, message: "Откройте панель «Участники» в VirtualRoom и повторите проверку." };
       }
 
-      document.getElementById(MISSING_ID)?.remove();
       // Состав из Mattermost подтягивается до сравнения: список мог измениться.
       await refreshMattermost(false);
       const actualNames = await collectAllNames(panel.scroller);
@@ -1023,7 +1091,7 @@
       const missing = activeRoster.participants.filter(
         (name) => !VRMeetups.participantIsPresent(activeRoster, name, actualNameKeys)
       );
-      renderResult(panel.scroller, missing);
+      renderResult(panel, missing);
       updatePresentMarkers();
       ignoreMutationsUntil = Date.now() + 1000;
       return {
@@ -1040,12 +1108,41 @@
     }
   }
 
+  // Автопроверка ждёт, пока человек отпустит список: сама она прокручивает
+  // панель, и делать это под рукой пользователя нельзя.
   function scheduleAutoScan() {
     if (!activeRoster || scanning || Date.now() < ignoreMutationsUntil) return;
+    if (!autoScanWaitingSince) autoScanWaitingSince = Date.now();
     clearTimeout(autoScanTimer);
     autoScanTimer = setTimeout(() => {
-      if (!scanning && Date.now() >= ignoreMutationsUntil) scanParticipants();
-    }, 700);
+      if (scanning || Date.now() < ignoreMutationsUntil) return;
+      const defer = VRMeetups.shouldDeferScan({
+        now: Date.now(),
+        lastUserScrollAt,
+        hovered: panelHovered,
+        waitingSince: autoScanWaitingSince
+      });
+      if (defer) {
+        autoScanTimer = setTimeout(scheduleAutoScan, 500);
+        return;
+      }
+      autoScanWaitingSince = 0;
+      scanParticipants();
+    }, AUTO_SCAN_DELAY);
+  }
+
+  // Панель пересоздаётся при переоткрытии, поэтому слушатели навешиваются
+  // на найденный скроллер один раз и обновляются, если узел заменился.
+  function watchUserActivity() {
+    const panel = findPanel();
+    if (!panel || watchedScroller === panel.scroller) return;
+
+    watchedScroller = panel.scroller;
+    panel.scroller.addEventListener("scroll", () => {
+      if (!programmaticScroll) lastUserScrollAt = Date.now();
+    }, { passive: true });
+    panel.listContainer.addEventListener("pointerenter", () => { panelHovered = true; });
+    panel.listContainer.addEventListener("pointerleave", () => { panelHovered = false; });
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -1079,6 +1176,7 @@
       })
     );
     if (participantsChanged) {
+      watchUserActivity();
       updatePresentMarkers();
       scheduleAutoScan();
     }
@@ -1086,6 +1184,7 @@
 
   observer.observe(document.documentElement, { childList: true, subtree: true });
   loadActiveRoster().then(() => {
+    watchUserActivity();
     updatePresentMarkers();
     if (activeRoster && findPanel()) scheduleAutoScan();
     scheduleMidnightRefresh();

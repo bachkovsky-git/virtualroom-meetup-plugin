@@ -1,12 +1,27 @@
+/* Блок закреплён над списком участников и не участвует в его прокрутке:
+   при большом числе отсутствующих прокручивается сам, но не съедает
+   больше 40% высоты панели. */
 #vrm-attendance-missing {
+  box-sizing: border-box;
   width: 100%;
+  flex: 0 0 auto;
+  /* Проценты требуют заданной высоты у родителя, а разметка панели нам не
+     принадлежит, поэтому предел считается от окна. */
+  max-height: 40vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: #8e9ca0;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+#vrm-attendance-missing.vrm-is-collapsed {
+  max-height: none;
+  overflow-y: visible;
+}
+
 #vrm-attendance-missing .vrm-missing-delimiter {
   height: 1px;
-  margin: 0 12px;
+  margin: 4px 12px 0;
   background: rgba(142, 156, 160, 0.28);
 }
 
