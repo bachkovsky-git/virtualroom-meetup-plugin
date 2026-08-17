@@ -72,13 +72,15 @@
    кнопка обновления. Оборот с разгоном и торможением выглядит спокойнее
    равномерного вращения. */
 #vrm-attendance-missing.vrm-is-stale .vrm-mattermost-button svg,
-#vrm-attendance-missing.vrm-is-refreshing .vrm-mattermost-button svg {
+#vrm-attendance-missing.vrm-is-refreshing .vrm-mattermost-button svg,
+#vrm-attendance-missing .vrm-mattermost-button.vrm-is-busy svg {
   animation: vrm-spin 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
   transform-origin: 50% 50%;
 }
 
 #vrm-attendance-missing.vrm-is-stale .vrm-mattermost-button,
-#vrm-attendance-missing.vrm-is-refreshing .vrm-mattermost-button {
+#vrm-attendance-missing.vrm-is-refreshing .vrm-mattermost-button,
+#vrm-attendance-missing .vrm-mattermost-button.vrm-is-busy {
   color: #35bd7d;
 }
 
@@ -202,8 +204,9 @@
 
 #vrm-attendance-missing .vrm-mattermost-button.vrm-has-warning { color: #e0a13c; }
 
+/* Во время обновления кнопка не гаснет — она вращается, а повторные нажатия
+   просто не проходят. */
 #vrm-attendance-missing .vrm-mattermost-button.vrm-is-busy {
-  opacity: 0.5;
   pointer-events: none;
 }
 

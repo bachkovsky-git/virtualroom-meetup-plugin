@@ -474,9 +474,17 @@
     button.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
+      // Вращение включается сразу: самая долгая часть — запрос в Mattermost,
+      // и раньше она проходила без анимации, кнопка лишь гасла.
       button.classList.add("vrm-is-busy");
-      await refreshMattermost(true);
-      await scanParticipants(activeRoster?.id);
+      markRefreshing(true);
+      try {
+        await refreshMattermost(true);
+        await scanParticipants(activeRoster?.id);
+      } finally {
+        markRefreshing(false);
+        button.classList.remove("vrm-is-busy");
+      }
     });
     return button;
   }
