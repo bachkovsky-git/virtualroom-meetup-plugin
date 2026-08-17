@@ -156,5 +156,25 @@
     return cleanState;
   }
 
-  root.VRMStorage = { load, save, newId };
+  // Кеш последней отрисовки хранится отдельно от настроек: он меняется часто,
+  // а слушатели изменений следят только за ключами состояния.
+  const RESULTS_KEY = "lastResults";
+  const RESULTS_LIMIT = 8;
+
+  async function loadResults() {
+    const stored = await chrome.storage.local.get(RESULTS_KEY);
+    const results = stored[RESULTS_KEY];
+    return results && typeof results === "object" ? VRMeetups.pruneCache(results, RESULTS_LIMIT) : {};
+  }
+
+  async function saveResult(key, entry) {
+    if (!key) return {};
+    const results = await loadResults();
+    results[key] = entry;
+    const pruned = VRMeetups.pruneCache(results, RESULTS_LIMIT);
+    await chrome.storage.local.set({ [RESULTS_KEY]: pruned });
+    return pruned;
+  }
+
+  root.VRMStorage = { load, save, newId, loadResults, saveResult };
 })(typeof globalThis !== "undefined" ? globalThis : window);

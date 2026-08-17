@@ -36,6 +36,7 @@
   let programmaticScroll = false;
   let autoScanWaitingSince = 0;
   let watchedScroller = null;
+  let resultCache = {};
 
   function currentRoomKey() {
     return VRMeetups.roomKey(location.href);
@@ -144,13 +145,20 @@
     const panel = findPanel();
     if (!panel || !lastActualNames.size) return;
 
-    await refreshMattermost(true);
+    markRefreshing(true);
+    try {
+      await refreshMattermost(true);
+    } finally {
+      markRefreshing(false);
+    }
     if (!activeRoster) return;
     const actualNameKeys = new Set(lastActualNames.keys());
     const missing = activeRoster.participants.filter(
       (name) => !VRMeetups.participantIsPresent(activeRoster, name, actualNameKeys)
     );
-    renderResult(panel, missing);
+    const rows = missing.map(rowView);
+    renderResult(panel, rows, { expected: activeRoster.participants.length });
+    rememberResult(rows);
     updatePresentMarkers();
     ignoreMutationsUntil = Date.now() + 1000;
   }
@@ -158,6 +166,38 @@
   function scheduleMattermostRefresh() {
     clearInterval(mattermostRefreshTimer);
     mattermostRefreshTimer = setInterval(refreshMattermostStatuses, 300000);
+  }
+
+  // --- Кеш последней проверки ---------------------------------------------
+
+  function currentResultKey() {
+    return VRMeetups.resultKey(currentRoomKey(), activeRoster?.id);
+  }
+
+  function markRefreshing(active) {
+    document.getElementById(MISSING_ID)?.classList.toggle("vrm-is-refreshing", active === true);
+  }
+
+  function rememberResult(rows) {
+    const key = currentResultKey();
+    if (!key || !activeRoster) return;
+    const entry = { rows, expected: activeRoster.participants.length, savedAt: Date.now() };
+    resultCache[key] = entry;
+    VRMStorage.saveResult(key, entry).catch(() => {});
+  }
+
+  // Панель могли закрыть и открыть заново — вместе с ней исчезает и наш блок.
+  // Рисуем его сразу из прошлого результата, а свежий приедет фоном.
+  function showRememberedResult() {
+    const panel = findPanel();
+    if (!panel || !activeRoster) return false;
+    const existing = document.getElementById(MISSING_ID);
+    if (existing && existing.parentElement === panel.listContainer) return false;
+
+    const entry = resultCache[currentResultKey()];
+    if (!entry || !Array.isArray(entry.rows)) return false;
+    renderResult(panel, entry.rows, { expected: entry.expected, stale: true });
+    return true;
   }
 
   function readNames(scope, namesByKey) {
@@ -363,7 +403,11 @@
     return period ? `${typeLabel}, ${period}` : typeLabel;
   }
 
-  function updateMissingAvatar(button, name, status) {
+  // Готовый «снимок» строки: и рисуется из него, и кладётся в кеш. Поэтому
+  // после закрытия и повторного открытия панели строка выглядит точно так же,
+  // как до этого, даже пока свежие данные ещё не пришли.
+  function rowView(name) {
+    const status = participantStatus(name);
     const statusDetails = {
       vacation: { icon: "🌴", label: "в отпуске" },
       absent: { icon: "🚌", label: "отсутствует" }
@@ -372,19 +416,37 @@
     const member = memberForName(name);
     const mattermostIcon = statusDetails ? null : (member && VRMattermost.memberIcon(member));
     const mattermostText = member ? VRMattermost.describe(member) : "";
+    const presence = member ? VRMattermost.presence(member) : null;
 
-    button.classList.toggle("vrm-has-status", Boolean(statusDetails || mattermostIcon));
-    button.classList.toggle("vrm-from-mattermost", Boolean(mattermostIcon));
-    button.textContent = statusDetails?.icon || mattermostIcon || VRMeetups.initials(name);
+    let title;
     if (statusDetails) {
-      button.title = `${name} — ${statusDescription(status)}. Нажмите, чтобы изменить статус`;
+      title = `${name} — ${statusDescription(status)}. Нажмите, чтобы изменить статус`;
     } else if (mattermostText) {
-      button.title = `${name} — ${mattermostText} (Mattermost). Нажмите, чтобы задать свой статус`;
+      title = `${name} — ${mattermostText} (Mattermost). Нажмите, чтобы задать свой статус`;
     } else {
-      button.title = `${name} — установить статус`;
+      title = `${name} — установить статус`;
     }
-    button.setAttribute("aria-label", button.title);
-    button.setAttribute("aria-pressed", statusDetails ? "true" : "false");
+
+    return {
+      name,
+      avatar: statusDetails?.icon || mattermostIcon || VRMeetups.initials(name),
+      hasStatus: Boolean(statusDetails || mattermostIcon),
+      fromMattermost: Boolean(mattermostIcon),
+      ownStatus: Boolean(statusDetails),
+      title,
+      presence: presence ? presence.short : "",
+      presenceTone: presence ? presence.tone : "",
+      presenceTitle: mattermostText ? `${name} в Mattermost: ${mattermostText}` : ""
+    };
+  }
+
+  function applyRowView(button, view) {
+    button.classList.toggle("vrm-has-status", Boolean(view.hasStatus));
+    button.classList.toggle("vrm-from-mattermost", Boolean(view.fromMattermost));
+    button.textContent = view.avatar;
+    button.title = view.title;
+    button.setAttribute("aria-label", view.title);
+    button.setAttribute("aria-pressed", view.ownStatus ? "true" : "false");
   }
 
   function closeStatusMenu() {
@@ -410,7 +472,7 @@
     activeRoster = VRMeetups.rosterById(state.rosters, activeRoster.id);
 
     document.querySelectorAll(".vrm-missing-avatar").forEach((button) => {
-      if (button.dataset.participantKey === nameKey) updateMissingAvatar(button, name, participantStatus(name));
+      if (button.dataset.participantKey === nameKey) applyRowView(button, rowView(name));
     });
     updatePresentMarkers();
   }
@@ -658,29 +720,26 @@
     placeStatusMenu(menu, anchor, '[aria-checked="true"]');
   }
 
-  function missingRowData(name) {
-    const status = participantStatus(name);
-    const member = memberForName(name);
-    return {
-      name,
-      icon: status?.type || (member && VRMattermost.memberIcon(member)) || "",
-      presence: member ? VRMattermost.presence(member).short : ""
-    };
-  }
-
-  function renderResult(panel, missing) {
+  // rows — готовые «снимки» строк: свежие после проверки или взятые из кеша,
+  // когда панель только что открылась и проверка ещё идёт.
+  function renderResult(panel, rows, { expected, stale = false } = {}) {
     if (!activeRoster) {
       document.getElementById(MISSING_ID)?.remove();
       lastRenderSignature = "";
       return;
     }
 
-    const signature = VRMeetups.missingSignature(missing.map(missingRowData), {
-      count: `${missing.length}/${activeRoster.participants.length}`,
-      roster: activeRoster.name,
-      collapsed: state.missingCollapsed === true,
-      notice: mmNotice
-    });
+    const total = Number.isFinite(expected) ? expected : activeRoster.participants.length;
+    const signature = VRMeetups.missingSignature(
+      rows.map((view) => ({ name: view.name, icon: view.avatar, presence: view.presence })),
+      {
+        count: `${rows.length}/${total}`,
+        roster: activeRoster.name,
+        collapsed: state.missingCollapsed === true,
+        notice: mmNotice,
+        stale
+      }
+    );
     const existing = document.getElementById(MISSING_ID);
     // Пока показывать нечего нового, DOM не трогаем: иначе раздел мигает
     // при каждой проверке и при обновлении статусов.
@@ -703,7 +762,13 @@
     label.textContent = "Не пришли";
     const count = document.createElement("span");
     count.className = "vrm-missing-count";
-    count.textContent = `${missing.length}/${activeRoster.participants.length}`;
+    count.textContent = `${rows.length}/${total}`;
+    // Значок кручения показывается, пока данные из прошлой проверки: сам блок
+    // при этом не прячется.
+    const refreshing = document.createElement("span");
+    refreshing.className = "vrm-refreshing";
+    refreshing.textContent = "⟳";
+    refreshing.title = "Показаны данные прошлой проверки, идёт обновление";
     const rosterLabel = document.createElement("span");
     rosterLabel.className = "vrm-roster-name";
     rosterLabel.textContent = activeRoster.name;
@@ -715,21 +780,23 @@
     actions.className = "vrm-header-actions";
     if (VRMattermost.isMattermost(activeRoster)) actions.append(createMattermostButton());
     actions.append(createGearButton());
-    header.append(createCollapseButton(section), label, count, rosterLabel, actions);
+    header.append(createCollapseButton(section), label, count, refreshing, rosterLabel, actions);
     section.append(header);
 
     const body = document.createElement("div");
     body.className = "vrm-missing-body";
     section.append(body);
     section.classList.toggle("vrm-is-collapsed", state.missingCollapsed);
+    section.classList.toggle("vrm-is-stale", stale === true);
 
-    if (!missing.length) {
+    if (!rows.length) {
       const allPresent = document.createElement("div");
       allPresent.className = "vrm-all-present";
       allPresent.textContent = "Все ожидаемые участники на месте";
       body.append(allPresent);
     } else {
-      missing.forEach((name) => {
+      rows.forEach((view) => {
+        const name = view.name;
         const row = document.createElement("div");
         row.className = "vrm-missing-row";
         const avatar = document.createElement("button");
@@ -737,7 +804,7 @@
         avatar.className = "vrm-missing-avatar";
         avatar.dataset.participantKey = VRMeetups.comparisonKey(name);
         avatar.setAttribute("aria-haspopup", "menu");
-        updateMissingAvatar(avatar, name, participantStatus(name));
+        applyRowView(avatar, view);
         avatar.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -750,13 +817,11 @@
         row.append(avatar, person);
 
         // Из Mattermost видно, человек вообще у компьютера или уже ушёл.
-        const member = memberForName(name);
-        if (member) {
-          const presence = VRMattermost.presence(member);
+        if (view.presence) {
           const badge = document.createElement("span");
-          badge.className = `vrm-presence vrm-presence-${presence.tone}`;
-          badge.textContent = presence.short;
-          badge.title = `${name} в Mattermost: ${VRMattermost.describe(member)}`;
+          badge.className = `vrm-presence vrm-presence-${view.presenceTone}`;
+          badge.textContent = view.presence;
+          badge.title = view.presenceTitle || view.presence;
           row.append(badge);
         }
         body.append(row);
@@ -1083,6 +1148,9 @@
         return { ok: false, message: "Откройте панель «Участники» в VirtualRoom и повторите проверку." };
       }
 
+      // Пока идёт проверка, показанный блок остаётся на месте и лишь помечается
+      // как обновляющийся: прятать его нельзя, он и так самый нужный.
+      markRefreshing(true);
       // Состав из Mattermost подтягивается до сравнения: список мог измениться.
       await refreshMattermost(false);
       const actualNames = await collectAllNames(panel.scroller);
@@ -1091,7 +1159,9 @@
       const missing = activeRoster.participants.filter(
         (name) => !VRMeetups.participantIsPresent(activeRoster, name, actualNameKeys)
       );
-      renderResult(panel, missing);
+      const rows = missing.map(rowView);
+      renderResult(panel, rows, { expected: activeRoster.participants.length });
+      rememberResult(rows);
       updatePresentMarkers();
       ignoreMutationsUntil = Date.now() + 1000;
       return {
@@ -1105,6 +1175,7 @@
       };
     } finally {
       scanning = false;
+      markRefreshing(false);
     }
   }
 
@@ -1177,14 +1248,19 @@
     );
     if (participantsChanged) {
       watchUserActivity();
+      // Панель могли только что открыть: блок возвращается из кеша сразу,
+      // не дожидаясь проверки.
+      showRememberedResult();
       updatePresentMarkers();
       scheduleAutoScan();
     }
   });
 
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  loadActiveRoster().then(() => {
+  Promise.all([loadActiveRoster(), VRMStorage.loadResults()]).then(([, results]) => {
+    resultCache = results;
     watchUserActivity();
+    showRememberedResult();
     updatePresentMarkers();
     if (activeRoster && findPanel()) scheduleAutoScan();
     scheduleMidnightRefresh();
