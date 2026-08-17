@@ -113,6 +113,32 @@
     );
   }
 
+  // Чтение виртуализированного списка требует прокрутки, а прокрутка мешает
+  // тому, кто в этот момент сам листает список. Поэтому скан откладывается,
+  // пока человек занят панелью — но не дольше предела, иначе состав
+  // перестанет обновляться совсем.
+  const SCROLL_QUIET_MS = 1500;
+  const MAX_DEFER_MS = 10000;
+
+  function shouldDeferScan({ now, lastUserScrollAt, hovered, waitingSince } = {}) {
+    const moment = Number(now) || 0;
+    if (waitingSince && moment - waitingSince >= MAX_DEFER_MS) return false;
+    if (hovered) return true;
+    return Boolean(lastUserScrollAt) && moment - lastUserScrollAt < SCROLL_QUIET_MS;
+  }
+
+  // Отпечаток отрисованного раздела: пока он не меняется, DOM не пересоздаётся
+  // и раздел не мигает при частых проверках.
+  function missingSignature(missing, extras) {
+    const rows = (missing || []).map((item) =>
+      typeof item === "string" ? item : [item?.name, item?.icon, item?.presence].join("|")
+    );
+    const tail = Object.entries(extras || {})
+      .sort(([first], [second]) => first.localeCompare(second))
+      .map(([key, value]) => `${key}=${value}`);
+    return [...rows, ...tail].join("\n");
+  }
+
   function localDateISO(date = new Date()) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -189,6 +215,8 @@
     nameTokens,
     namesMatch,
     participantIsPresent,
+    shouldDeferScan,
+    missingSignature,
     localDateISO,
     addLocalDays,
     normalizeStatus,
