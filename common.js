@@ -127,6 +127,22 @@
     return Boolean(lastUserScrollAt) && moment - lastUserScrollAt < SCROLL_QUIET_MS;
   }
 
+  // Результат прошлой проверки хранится по паре «комната + список», чтобы при
+  // повторном открытии панели раздел рисовался сразу, до новой проверки.
+  function resultKey(roomKey, rosterId) {
+    if (!roomKey || !rosterId) return "";
+    return `${roomKey}|${rosterId}`;
+  }
+
+  function pruneCache(entries, limit) {
+    return Object.fromEntries(
+      Object.entries(entries || {})
+        .filter(([key, entry]) => key && entry && typeof entry === "object")
+        .sort(([, first], [, second]) => (Number(second?.savedAt) || 0) - (Number(first?.savedAt) || 0))
+        .slice(0, Math.max(1, Number(limit) || 1))
+    );
+  }
+
   // Отпечаток отрисованного раздела: пока он не меняется, DOM не пересоздаётся
   // и раздел не мигает при частых проверках.
   function missingSignature(missing, extras) {
@@ -217,6 +233,8 @@
     participantIsPresent,
     shouldDeferScan,
     missingSignature,
+    resultKey,
+    pruneCache,
     localDateISO,
     addLocalDays,
     normalizeStatus,

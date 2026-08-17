@@ -85,6 +85,24 @@ check("свернули раздел — отпечаток другой",
   VRMeetups.missingSignature(rowsA, { ...extrasA, collapsed: true }) === VRMeetups.missingSignature(rowsA, extrasA),
   false);
 
+// --- common.js: кеш последнего результата -----------------------------------
+
+check("ключ кеша из комнаты и списка",
+  VRMeetups.resultKey("https://vr.example.com/room/7", "r1"), "https://vr.example.com/room/7|r1");
+check("без списка ключа нет", VRMeetups.resultKey("https://vr.example.com/room/7", ""), "");
+check("без комнаты ключа нет", VRMeetups.resultKey("", "r1"), "");
+
+const cacheEntries = {
+  old: { savedAt: 1000, rows: [] },
+  newer: { savedAt: 3000, rows: [] },
+  middle: { savedAt: 2000, rows: [] }
+};
+check("кеш обрезается до свежих записей",
+  Object.keys(VRMeetups.pruneCache(cacheEntries, 2)), ["newer", "middle"]);
+check("мусор из кеша выбрасывается",
+  Object.keys(VRMeetups.pruneCache({ ok: { savedAt: 1 }, "": { savedAt: 2 }, broken: null }, 5)), ["ok"]);
+check("пустой кеш не ломает", VRMeetups.pruneCache(undefined, 3), {});
+
 // --- mattermost.js: адрес и имена ------------------------------------------
 
 check("адрес без схемы", VRMattermost.normalizeBaseUrl("mm.example.com"), "https://mm.example.com");
