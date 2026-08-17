@@ -9,13 +9,12 @@
   const detailedToggle = document.getElementById("detailed-editor-toggle");
   const participantRows = document.getElementById("participant-rows");
   const addParticipantButton = document.getElementById("add-participant");
-  const bindRoom = document.getElementById("bind-room");
   const roomLabel = document.getElementById("room-label");
+  const rosterSummary = document.getElementById("roster-summary");
   const highlightPresent = document.getElementById("highlight-present");
   const newButton = document.getElementById("new-roster");
   const deleteButton = document.getElementById("delete-roster");
   const saveButton = document.getElementById("save");
-  const checkButton = document.getElementById("check");
   const statusBox = document.getElementById("status");
   const mmEnabled = document.getElementById("mm-enabled");
   const mmFields = document.getElementById("mm-fields");
@@ -30,11 +29,13 @@
   let state = {
     rosters: [],
     roomAssignments: {},
+    titleAssignments: {},
     selectedRosterId: null,
     highlightPresent: true,
     detailedEditor: false
   };
   let currentRoomKey = "";
+  let currentTitleKey = "";
   let currentTab = null;
   let draftId = null;
   let detailedRows = [];
@@ -50,10 +51,9 @@
   function setBusy(busy) {
     newButton.disabled = busy;
     saveButton.disabled = busy;
-    checkButton.disabled = busy;
     addParticipantButton.disabled = busy;
     deleteButton.disabled = busy || !VRMeetups.rosterById(state.rosters, draftId);
-    checkButton.textContent = busy ? "Проверяю…" : "Проверить сейчас";
+    saveButton.textContent = busy ? "Сохраняю…" : "Сохранить";
   }
 
   async function getActiveTab() {
@@ -195,11 +195,24 @@
     state.rosters.forEach((roster) => {
       const option = document.createElement("option");
       option.value = roster.id;
-      option.textContent = `${roster.name} (${roster.participants.length})`;
+      option.textContent = roster.name;
       rosterSelect.append(option);
     });
     if (selectedId && VRMeetups.rosterById(state.rosters, selectedId)) rosterSelect.value = selectedId;
     rosterSelect.disabled = state.rosters.length === 0;
+    showRosterSummary(VRMeetups.rosterById(state.rosters, selectedId));
+  }
+
+  function showRosterSummary(roster) {
+    if (!roster) {
+      rosterSummary.textContent = "Новый список ещё не сохранён.";
+      return;
+    }
+    // Привязка могла быть сделана и по названию встречи, а не только по адресу.
+    const bound = state.roomAssignments?.[currentRoomKey] === roster.id ||
+      (currentTitleKey && state.titleAssignments?.[currentTitleKey] === roster.id);
+    const people = `${roster.participants.length} чел.`;
+    rosterSummary.textContent = bound ? `${people} · запомнен для этой встречи` : people;
   }
 
   function timingForStatus(status) {
@@ -373,7 +386,7 @@
     state.selectedRosterId = roster.id;
     fillSelect(roster.id);
     showRoster(roster);
-    bindRoom.checked = state.roomAssignments[currentRoomKey] === roster.id;
+    bindRosterToTab(roster.id);
   }
 
   function startNewRoster() {
@@ -382,7 +395,6 @@
     rosterName.value = "";
     rosterText.value = "";
     detailedRows = [];
-    bindRoom.checked = false;
     deleteButton.disabled = true;
     draftSource = null;
     mmEnabled.checked = false;
@@ -443,17 +455,20 @@
     state.selectedRosterId = savedRoster.id;
     state.highlightPresent = highlightPresent.checked;
     state.detailedEditor = detailedToggle.checked;
-    if (currentRoomKey) {
-      if (bindRoom.checked) state.roomAssignments[currentRoomKey] = savedRoster.id;
-      else delete state.roomAssignments[currentRoomKey];
-    }
-
     state = await VRMStorage.save(state);
     const cleanRoster = VRMeetups.rosterById(state.rosters, savedRoster.id);
     draftId = cleanRoster.id;
     fillSelect(cleanRoster.id);
     showRoster(cleanRoster);
-    if (showConfirmation) showStatus(`Список «${name}» сохранён: ${cleanRoster.participants.length} чел.`, "success");
+    const bound = await bindRosterToTab(cleanRoster.id);
+    if (showConfirmation) {
+      showStatus(
+        bound
+          ? `Список «${name}» сохранён и выбран для этой встречи: ${cleanRoster.participants.length} чел.`
+          : `Список «${name}» сохранён: ${cleanRoster.participants.length} чел.`,
+        "success"
+      );
+    }
     return cleanRoster;
   }
 
@@ -461,58 +476,46 @@
     const roster = VRMeetups.rosterById(state.rosters, draftId);
     if (!roster || !confirm(`Удалить список «${roster.name}»?`)) return;
     state.rosters = state.rosters.filter((item) => item.id !== roster.id);
-    Object.keys(state.roomAssignments).forEach((key) => {
-      if (state.roomAssignments[key] === roster.id) delete state.roomAssignments[key];
+    [state.roomAssignments, state.titleAssignments].forEach((assignments) => {
+      Object.keys(assignments || {}).forEach((key) => {
+        if (assignments[key] === roster.id) delete assignments[key];
+      });
     });
     if (state.selectedRosterId === roster.id) state.selectedRosterId = state.rosters[0]?.id || null;
     state = await VRMStorage.save(state);
-    const next = VRMeetups.rosterForRoom(state, currentRoomKey);
+    const next = VRMeetups.rosterForRoom(state, currentRoomKey, currentTitleKey);
     fillSelect(next?.id);
     showRoster(next);
-    bindRoom.checked = Boolean(next && state.roomAssignments[currentRoomKey] === next.id);
     showStatus(`Список «${roster.name}» удалён.`, "success");
   }
 
-  async function checkParticipants() {
-    setBusy(true);
+  // Страница встречи сама решает, комната ли это: на обычной вкладке
+  // обработчика нет и привязка не создаётся.
+  async function bindRosterToTab(rosterId) {
+    if (!currentTab?.id || !rosterId) return false;
     try {
-      const savedRoster = await saveRoster(false);
-      if (!currentTab?.id) throw new Error("Не удалось определить открытую вкладку.");
-      const result = await chrome.tabs.sendMessage(currentTab.id, {
-        type: "VRM_SCAN_PARTICIPANTS",
-        rosterId: savedRoster.id
-      });
-      if (!result?.ok) {
-        showStatus(result?.message || "Откройте панель «Участники» и повторите проверку.", "warning");
-      } else if (result.missing.length === 0) {
-        showStatus(`«${result.rosterName}»: все ${result.expected} на месте.`, "success");
-      } else {
-        showStatus(
-          `«${result.rosterName}»: пришли ${result.presentExpected} из ${result.expected}. Не пришли: ${result.missing.join(", ")}.`,
-          "warning"
-        );
-      }
-    } catch (error) {
-      const inaccessible = /Receiving end does not exist|Could not establish connection/i.test(error.message);
-      showStatus(inaccessible ? "Обновите вкладку VirtualRoom после обновления расширения." : error.message, "error");
-    } finally {
-      setBusy(false);
+      const result = await chrome.tabs.sendMessage(currentTab.id, { type: "VRM_BIND_ROSTER", rosterId });
+      if (result?.ok) state = await VRMStorage.load();
+      showRosterSummary(VRMeetups.rosterById(state.rosters, rosterId));
+      return Boolean(result?.ok);
+    } catch (_error) {
+      return false;
     }
   }
 
   async function init() {
     currentTab = await getActiveTab();
     currentRoomKey = VRMeetups.roomKey(currentTab?.url || "");
+    currentTitleKey = VRMeetups.roomTitleKey(currentTab?.title || "");
     roomLabel.textContent = currentTab?.title || currentRoomKey || "Текущая вкладка";
     roomLabel.title = currentRoomKey;
     state = await VRMStorage.load();
     highlightPresent.checked = state.highlightPresent !== false;
     mmStatuses.checked = state.showMattermostStatuses !== false;
     mmUrl.value = state.mattermostUrl || "";
-    const activeRoster = VRMeetups.rosterForRoom(state, currentRoomKey);
+    const activeRoster = VRMeetups.rosterForRoom(state, currentRoomKey, currentTitleKey);
     fillSelect(activeRoster?.id);
     showRoster(activeRoster);
-    bindRoom.checked = Boolean(activeRoster && state.roomAssignments[currentRoomKey] === activeRoster.id);
     if (!activeRoster) startNewRoster();
     if (draftSource) mmAutoConnect();
   }
@@ -556,7 +559,6 @@
   });
   deleteButton.addEventListener("click", () => deleteRoster().catch((error) => showStatus(error.message, "error")));
   saveButton.addEventListener("click", () => saveRoster(true).catch((error) => showStatus(error.message, "error")));
-  checkButton.addEventListener("click", checkParticipants);
   mmEnabled.addEventListener("change", () => {
     mmFields.hidden = !mmEnabled.checked;
     if (mmEnabled.checked) {
