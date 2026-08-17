@@ -47,6 +47,8 @@
   let resultCache = {};
   let editorHint = "";
   let reportedMeeting = "";
+  let missingHeightObserver = null;
+  let missingHeightTimer = null;
   let editorHintTimer = null;
 
   function currentRoomKey() {
@@ -461,7 +463,13 @@
     const button = document.createElement("button");
     button.type = "button";
     button.className = "vrm-roster-name vrm-roster-switch";
-    button.textContent = `${activeRoster.name} ▾`;
+    const label = document.createElement("span");
+    label.className = "vrm-roster-switch-name";
+    label.textContent = activeRoster.name;
+    const caret = document.createElement("span");
+    caret.className = "vrm-roster-switch-caret";
+    caret.textContent = "▾";
+    button.append(label, caret);
     button.title = VRMattermost.isMattermost(activeRoster)
       ? `Список «${activeRoster.name}» — состав из канала Mattermost «${activeRoster.source.channelDisplayName || activeRoster.source.channelName}». Нажмите, чтобы сменить список`
       : `Список «${activeRoster.name}». Нажмите, чтобы сменить список`;
@@ -903,6 +911,7 @@
     const header = document.createElement("div");
     header.className = "vrm-missing-header";
     const label = document.createElement("span");
+    label.className = "vrm-missing-label";
     label.textContent = "Список не выбран";
     const actions = document.createElement("div");
     actions.className = "vrm-header-actions";
@@ -989,6 +998,7 @@
     const header = document.createElement("div");
     header.className = "vrm-missing-header";
     const label = document.createElement("span");
+    label.className = "vrm-missing-label";
     label.textContent = "Не пришли";
     const count = document.createElement("span");
     count.className = "vrm-missing-count";
@@ -1050,6 +1060,9 @@
       });
     }
 
+    applyMissingHeight(body);
+    watchMissingHeight(body);
+
     // Разделитель снизу: блок стоит над списком и отделяется от него.
     section.append(delimiter);
 
@@ -1079,6 +1092,36 @@
       editorHint = "";
       redrawBlock();
     }, 15000);
+  }
+
+  // Высота области — вещь, которую пользователь настраивает один раз и ждёт,
+  // что она сохранится.
+  function applyMissingHeight(body) {
+    const height = VRMeetups.clampMissingHeight(state.missingHeight);
+    if (!height) return;
+    body.style.height = `${height}px`;
+    body.style.maxHeight = "none";
+  }
+
+  function watchMissingHeight(body) {
+    if (!globalThis.ResizeObserver) return;
+    missingHeightObserver?.disconnect();
+    missingHeightObserver = new ResizeObserver(() => {
+      if (state.missingCollapsed) return;
+      // Браузер, меняя размер за уголок, выставляет высоту инлайном. Без неё
+      // изменение пришло от содержимого или размера окна — запоминать нечего.
+      if (!body.style.height) return;
+      const height = VRMeetups.clampMissingHeight(body.offsetHeight);
+      if (!height || Math.abs(height - VRMeetups.clampMissingHeight(state.missingHeight)) <= 2) return;
+
+      clearTimeout(missingHeightTimer);
+      missingHeightTimer = setTimeout(async () => {
+        state.missingHeight = height;
+        ignoreMutationsUntil = Date.now() + 1000;
+        state = await VRMStorage.save(state);
+      }, 400);
+    });
+    missingHeightObserver.observe(body);
   }
 
   function createEditorHint() {

@@ -173,6 +173,18 @@
     return { rosterId: blank ? "" : rosterId, blank };
   }
 
+  // Высоту области отсутствующих пользователь тянет сам, и её нужно удержать
+  // в разумных пределах: слишком маленькая бесполезна, слишком большая съедает
+  // список участников.
+  const MIN_MISSING_HEIGHT = 64;
+  const MAX_MISSING_HEIGHT = 900;
+
+  function clampMissingHeight(value) {
+    const height = Math.round(Number(value) || 0);
+    if (!height) return 0;
+    return Math.min(MAX_MISSING_HEIGHT, Math.max(MIN_MISSING_HEIGHT, height));
+  }
+
   // Результат прошлой проверки хранится по паре «комната + список», чтобы при
   // повторном открытии панели раздел рисовался сразу, до новой проверки.
   function resultKey(roomKey, rosterId) {
@@ -286,6 +298,7 @@
     resultKey,
     pruneCache,
     editorIntent,
+    clampMissingHeight,
     localDateISO,
     addLocalDays,
     normalizeStatus,

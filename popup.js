@@ -31,6 +31,8 @@
   const mmTeam = document.getElementById("mm-team");
   const mmChannel = document.getElementById("mm-channel");
   const mmInfo = document.getElementById("mm-info");
+  const mmLoading = document.getElementById("mm-loading");
+  const mmLoadingText = document.getElementById("mm-loading-text");
   const mmStatuses = document.getElementById("mm-statuses");
 
   let state = {
@@ -109,6 +111,16 @@
   function mmSay(message, kind) {
     mmInfo.textContent = message;
     mmInfo.className = kind ? `hint mm-${kind}` : "hint";
+  }
+
+  // Видимый признак работы: смена канала тянет состав, и без индикатора
+  // непонятно, происходит ли что-то вообще.
+  function mmBusy(text) {
+    mmLoading.hidden = !text;
+    if (text) mmLoadingText.textContent = text;
+    saveButton.disabled = Boolean(text);
+    mmTeam.disabled = Boolean(text) || !mmTeams.length;
+    mmChannel.disabled = Boolean(text) || !mmChannels.length;
   }
 
   async function mmSend(message) {
@@ -282,8 +294,8 @@
       return;
     }
 
-    mmChannel.disabled = true;
-    mmSay("Читаю состав канала…");
+    mmBusy("Читаю состав канала…");
+    mmSay("");
     try {
       const source = {
         type: "mattermost",
@@ -316,7 +328,7 @@
     } catch (error) {
       mmSay(error.message, "error");
     } finally {
-      mmChannel.disabled = false;
+      mmBusy("");
     }
   }
 
@@ -854,8 +866,10 @@
     // Каналы прошлой команды показывать нельзя, но если для новой они уже
     // в кеше — покажем их сразу, без пустого списка.
     showChannels(mmLists.channels[mmTeam.value] || [], "");
+    mmBusy("Загружаю каналы команды…");
     mmFillChannels(VRMattermost.normalizeBaseUrl(mmUrl.value), mmTeam.value, "")
-      .catch((error) => mmSay(error.message, "error"));
+      .catch((error) => mmSay(error.message, "error"))
+      .finally(() => mmBusy(""));
   });
   // Состав грузится сам при выборе канала — отдельной кнопки больше нет.
   mmChannel.addEventListener("change", async () => {

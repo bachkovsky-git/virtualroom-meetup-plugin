@@ -233,6 +233,34 @@ textarea {
   background: #eef2f3;
 }
 
+/* Пока состав тянется из канала, видно, что работа идёт. */
+.mm-loading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -6px 0 11px;
+  color: #12643f;
+  font-size: 11px;
+}
+
+.mm-spinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 2px solid rgba(32, 166, 106, 0.25);
+  border-top-color: #20a66a;
+  border-radius: 50%;
+  animation: mm-spin 720ms linear infinite;
+}
+
+@keyframes mm-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mm-spinner { animation-duration: 2s; }
+}
+
 .mm-fields label { font-size: 12px; }
 .mm-fields .hint { margin: 9px 0 11px; }
 .mm-fields .mm-error { color: #8b3030; }

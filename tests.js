@@ -141,6 +141,15 @@ check("отсутствие намерения не ломает", VRMeetups.edi
 check("намерение без времени считается свежим",
   VRMeetups.editorIntent({ rosterId: "r1" }, intentNow), { rosterId: "r1", blank: false });
 
+// --- common.js: высота области отсутствующих ---------------------------------
+
+check("высота в разумных пределах сохраняется", VRMeetups.clampMissingHeight(220), 220);
+check("слишком маленькая высота подтягивается к минимуму", VRMeetups.clampMissingHeight(10), 64);
+check("слишком большая высота ограничивается", VRMeetups.clampMissingHeight(5000), 900);
+check("ноль означает «высота не задана»", VRMeetups.clampMissingHeight(0), 0);
+check("мусор означает «высота не задана»", VRMeetups.clampMissingHeight("много"), 0);
+check("дробная высота округляется", VRMeetups.clampMissingHeight(180.6), 181);
+
 // --- common.js: кеш последнего результата -----------------------------------
 
 check("ключ кеша из комнаты и списка",
