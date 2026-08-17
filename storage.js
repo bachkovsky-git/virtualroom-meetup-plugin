@@ -174,6 +174,15 @@
     return cleanState;
   }
 
+  // Хранилище общее для страницы и окна редактора. Писать целиком состояние,
+  // прочитанное минуту назад, — значит затирать чужие правки: так пропадали
+  // привязки списков к встречам. patch читает свежее состояние и меняет только
+  // переданные поля.
+  async function patch(partial) {
+    const fresh = await load();
+    return save({ ...fresh, ...partial });
+  }
+
   // Кеш последней отрисовки хранится отдельно от настроек: он меняется часто,
   // а слушатели изменений следят только за ключами состояния.
   const RESULTS_KEY = "lastResults";
@@ -209,5 +218,5 @@
     return normalized;
   }
 
-  root.VRMStorage = { load, save, newId, loadResults, saveResult, loadLists, saveLists };
+  root.VRMStorage = { load, save, patch, newId, loadResults, saveResult, loadLists, saveLists };
 })(typeof globalThis !== "undefined" ? globalThis : window);

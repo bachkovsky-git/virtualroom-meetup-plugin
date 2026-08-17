@@ -274,8 +274,7 @@
     try {
       const { user } = await mmSend({ type: "VRM_MM_CONNECT", baseUrl });
       mmUrl.value = baseUrl;
-      state.mattermostUrl = baseUrl;
-      state = await VRMStorage.save(state);
+      state = await VRMStorage.patch({ mattermostUrl: baseUrl });
       mmSay(`Подключено как ${user.name || user.username}. Выберите команду и канал.`, "success");
       await mmFillTeams(baseUrl, draftSource?.teamId);
     } catch (error) {
@@ -320,9 +319,10 @@
         rowFromParticipant(name, { aliases: merged.aliases, statuses: existing?.statuses || {} })
       );
       if (!rosterName.value.trim()) rosterName.value = channel.displayName;
-      state.lastMattermostTeamId = team.id;
-      state.lastMattermostChannelId = channel.id;
-      state = await VRMStorage.save(state);
+      state = await VRMStorage.patch({
+        lastMattermostTeamId: team.id,
+        lastMattermostChannelId: channel.id
+      });
       applyMode();
       mmSay(`Загружено ${merged.participants.length} чел. из «${channel.displayName}». Не забудьте «Сохранить».`, "success");
     } catch (error) {
@@ -649,6 +649,9 @@
     if (isMattermostMode() && !draftSource) {
       throw new Error("Выберите канал Mattermost или переключитесь на ручной список.");
     }
+    // Страница могла привязать список к встрече, пока окно было открыто:
+    // сохраняем поверх свежего состояния, а не поверх прочитанного при старте.
+    state = await VRMStorage.load();
     const existingIndex = state.rosters.findIndex((roster) => roster.id === draftId);
     const existing = state.rosters[existingIndex];
     const { participants, statuses, aliases } = collectRosterData(existing);
@@ -690,6 +693,7 @@
   async function deleteRoster() {
     const roster = VRMeetups.rosterById(state.rosters, draftId);
     if (!roster || !confirm(`Удалить список «${roster.name}»?`)) return;
+    state = await VRMStorage.load();
     state.rosters = state.rosters.filter((item) => item.id !== roster.id);
     [state.roomAssignments, state.titleAssignments].forEach((assignments) => {
       Object.keys(assignments || {}).forEach((key) => {
@@ -813,10 +817,11 @@
   // «Сменить сервер» просто забывает адрес: доступ к домену остаётся, можно
   // сразу ввести другой сервер.
   async function forgetServer() {
-    state.mattermostUrl = "";
-    state.lastMattermostTeamId = "";
-    state.lastMattermostChannelId = "";
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({
+      mattermostUrl: "",
+      lastMattermostTeamId: "",
+      lastMattermostChannelId: ""
+    });
     mmLists = await VRMStorage.saveLists({ teams: [], channels: {} });
     stashedSource = null;
     mmListsReady = false;
@@ -844,9 +849,8 @@
     } else {
       rosterText.value = VRMeetups.parseExpected(detailedRows.map((row) => row.name).join("\n")).join("\n");
     }
-    state.detailedEditor = detailedToggle.checked;
     applyEditorMode();
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({ detailedEditor: detailedToggle.checked });
   });
   rosterText.addEventListener("input", updateRosterCount);
   deleteButton.addEventListener("click", () => deleteRoster().catch((error) => showStatus(error.message, "error")));
@@ -860,9 +864,7 @@
   mmConnect.addEventListener("click", mmConnectClick);
   mmForget.addEventListener("click", () => forgetServer().catch((error) => mmSay(error.message, "error")));
   mmTeam.addEventListener("change", async () => {
-    state.lastMattermostTeamId = mmTeam.value;
-    state.lastMattermostChannelId = "";
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({ lastMattermostTeamId: mmTeam.value, lastMattermostChannelId: "" });
     // Каналы прошлой команды показывать нельзя, но если для новой они уже
     // в кеше — покажем их сразу, без пустого списка.
     showChannels(mmLists.channels[mmTeam.value] || [], "");
@@ -874,18 +876,15 @@
   // Состав грузится сам при выборе канала — отдельной кнопки больше нет.
   mmChannel.addEventListener("change", async () => {
     if (!mmChannel.value) return;
-    state.lastMattermostChannelId = mmChannel.value;
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({ lastMattermostChannelId: mmChannel.value });
     mmLoadMembers();
   });
   mmStatuses.addEventListener("change", async () => {
-    state.showMattermostStatuses = mmStatuses.checked;
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({ showMattermostStatuses: mmStatuses.checked });
     showStatus(mmStatuses.checked ? "Статусы из Mattermost включены." : "Статусы из Mattermost выключены.", "success");
   });
   highlightPresent.addEventListener("change", async () => {
-    state.highlightPresent = highlightPresent.checked;
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({ highlightPresent: highlightPresent.checked });
     showStatus(highlightPresent.checked ? "Подсветка пришедших включена." : "Подсветка пришедших выключена.", "success");
   });
 
@@ -924,7 +923,20 @@
     if (areaName !== "local") return;
     if (changes.editorIntent?.newValue) {
       applyEditorIntent().catch((error) => showStatus(error.message, "error"));
+      return;
     }
+    // Списки и привязки могли измениться на странице — подтягиваем, чтобы
+    // следующее сохранение не затёрло чужую правку и выпадающий список не врал.
+    const touched = ["rosters", "roomAssignments", "titleAssignments", "selectedRosterId"];
+    if (!touched.some((key) => changes[key])) return;
+    VRMStorage.load().then((fresh) => {
+      state = fresh;
+      if (isDirty()) return;
+      const roster = VRMeetups.rosterById(state.rosters, draftId) ||
+        VRMeetups.rosterForRoom(state, currentRoomKey, currentTitleKey);
+      fillSelect(roster?.id);
+      if (roster && roster.id !== draftId) showRoster(roster);
+    }).catch(() => {});
   });
 
   chrome.tabs.onActivated.addListener(() => {

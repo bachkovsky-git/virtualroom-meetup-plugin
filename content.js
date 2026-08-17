@@ -55,8 +55,11 @@
     return VRMeetups.roomKey(location.href);
   }
 
+  // Ключ считается по заголовку вкладки, а не по разметке комнаты: элемент с
+  // названием может ещё не отрисоваться, и тогда ключ окажется другим — привязка
+  // к встрече потеряется.
   function currentTitleKey() {
-    return VRMeetups.roomTitleKey(currentRoomTitle());
+    return VRMeetups.roomTitleKey(document.title);
   }
 
   // Название встречи: сперва пробуем заголовок комнаты на странице, потом
@@ -100,13 +103,15 @@
     const roster = VRMeetups.rosterById(state.rosters, rosterId);
     if (!roster) return null;
 
-    state.roomAssignments = { ...state.roomAssignments, [currentRoomKey()]: roster.id };
     const titleKey = currentTitleKey();
-    if (titleKey) state.titleAssignments = { ...state.titleAssignments, [titleKey]: roster.id };
-    state.selectedRosterId = roster.id;
-
     ignoreMutationsUntil = Date.now() + 1000;
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({
+      roomAssignments: { ...state.roomAssignments, [currentRoomKey()]: roster.id },
+      titleAssignments: titleKey
+        ? { ...state.titleAssignments, [titleKey]: roster.id }
+        : state.titleAssignments,
+      selectedRosterId: roster.id
+    });
     activeRoster = VRMeetups.rosterById(state.rosters, roster.id);
     appliedSnapshotKey = "";
     return activeRoster;
@@ -166,7 +171,8 @@
       JSON.stringify(current.aliases) === JSON.stringify(aliases);
     if (unchanged) return;
 
-    state.rosters[index] = {
+    const synced = [...state.rosters];
+    synced[index] = {
       ...current,
       participants,
       aliases,
@@ -174,7 +180,7 @@
       updatedAt: Date.now()
     };
     ignoreMutationsUntil = Date.now() + 1000;
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({ rosters: synced });
     activeRoster = VRMeetups.rosterById(state.rosters, current.id);
   }
 
@@ -549,7 +555,7 @@
       button.title = state.missingCollapsed ? "Развернуть список «Не пришли»" : "Свернуть список «Не пришли»";
       button.setAttribute("aria-label", button.title);
       button.setAttribute("aria-expanded", String(!state.missingCollapsed));
-      state = await VRMStorage.save(state);
+      state = await VRMStorage.patch({ missingCollapsed: state.missingCollapsed });
     });
     return button;
   }
@@ -633,9 +639,10 @@
     if (status) statuses[nameKey] = status;
     else delete statuses[nameKey];
 
-    state.rosters[rosterIndex] = { ...state.rosters[rosterIndex], statuses, updatedAt: Date.now() };
+    const withStatus = [...state.rosters];
+    withStatus[rosterIndex] = { ...withStatus[rosterIndex], statuses, updatedAt: Date.now() };
     ignoreMutationsUntil = Date.now() + 1000;
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({ rosters: withStatus });
     activeRoster = VRMeetups.rosterById(state.rosters, activeRoster.id);
 
     document.querySelectorAll(".vrm-missing-avatar").forEach((button) => {
@@ -774,9 +781,10 @@
     }
     aliases[expectedKey] = existingAliases;
 
-    state.rosters[rosterIndex] = { ...state.rosters[rosterIndex], aliases, updatedAt: Date.now() };
+    const withAlias = [...state.rosters];
+    withAlias[rosterIndex] = { ...withAlias[rosterIndex], aliases, updatedAt: Date.now() };
     ignoreMutationsUntil = Date.now() + 1000;
-    state = await VRMStorage.save(state);
+    state = await VRMStorage.patch({ rosters: withAlias });
     activeRoster = VRMeetups.rosterById(state.rosters, activeRoster.id);
     closeStatusMenu();
     await scanParticipants(activeRoster.id);
@@ -1116,9 +1124,8 @@
 
       clearTimeout(missingHeightTimer);
       missingHeightTimer = setTimeout(async () => {
-        state.missingHeight = height;
         ignoreMutationsUntil = Date.now() + 1000;
-        state = await VRMStorage.save(state);
+        state = await VRMStorage.patch({ missingHeight: height });
       }, 400);
     });
     missingHeightObserver.observe(body);

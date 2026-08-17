@@ -161,6 +161,9 @@ textarea {
 
 .mode-panel { margin-bottom: 13px; }
 
+.mm-session[hidden],
+.mm-loading[hidden] { display: none; }
+
 .mm-session {
   display: flex;
   align-items: center;
