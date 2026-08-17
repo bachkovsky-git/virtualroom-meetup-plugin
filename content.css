@@ -144,18 +144,18 @@
   border: 0;
   border-radius: 7px;
   padding: 6px 11px;
-  color: #dce4e6;
-  background: rgba(142, 156, 160, 0.22);
-  cursor: pointer;
-  font: 700 12px inherit;
-}
-
-#vrm-attendance-missing .vrm-prompt-choose {
   color: #fff;
   background: #20a66a;
+  cursor: pointer;
+  font: 700 12px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-#vrm-attendance-missing .vrm-prompt-button:hover { filter: brightness(1.08); }
+#vrm-attendance-missing .vrm-prompt-button:hover { background: #178b58; }
+
+#vrm-attendance-missing .vrm-prompt-button:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.65);
+  outline-offset: 1px;
+}
 
 #vrm-attendance-missing .vrm-header-actions {
   display: flex;
