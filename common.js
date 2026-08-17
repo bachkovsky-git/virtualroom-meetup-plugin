@@ -47,14 +47,50 @@
       .join("");
   }
 
+  // Одноразовые части адреса: таймстамп против кеша, идентификатор сессии и
+  // прочее, что меняется при каждом заходе в ту же комнату. Если их не убрать,
+  // привязка списка к встрече не находится ни разу.
+  const VOLATILE_PARAMS = new Set([
+    "_", "t", "ts", "time", "timestamp", "rnd", "random", "cb", "nocache", "v",
+    "usersession", "session", "sessionid", "sid", "token", "jwt", "auth"
+  ]);
+
   function roomKey(value) {
     try {
       const url = new URL(value);
       url.hash = "";
+      const kept = Array.from(url.searchParams.entries())
+        .filter(([name]) => !VOLATILE_PARAMS.has(name.toLocaleLowerCase("en")))
+        .sort(([first], [second]) => first.localeCompare(second));
+      url.search = "";
+      kept.forEach(([name, paramValue]) => url.searchParams.append(name, paramValue));
       return url.toString();
     } catch (_error) {
       return String(value || "").split("#")[0];
     }
+  }
+
+  // Адрес вида «/room» одинаков для всех встреч системы, и опираться на него
+  // нельзя: различает их только название встречи.
+  function roomKeyIsSpecific(key) {
+    try {
+      const url = new URL(key);
+      if (Array.from(url.searchParams.keys()).length) return true;
+      return url.pathname.split("/").filter(Boolean).length > 1;
+    } catch (_error) {
+      return Boolean(key);
+    }
+  }
+
+  // Старые привязки записаны по полному адресу с одноразовыми частями —
+  // пересчитываем их на новый ключ, иначе выбор пришлось бы делать заново.
+  function rekeyByRoom(assignments) {
+    const result = {};
+    Object.entries(assignments || {}).forEach(([key, rosterId]) => {
+      const normalized = roomKey(key);
+      if (normalized) result[normalized] = rosterId;
+    });
+    return result;
   }
 
   function rosterById(rosters, id) {
@@ -88,9 +124,10 @@
   // Строгий поиск: только то, что пользователь сам привязал к этой встрече.
   // Ничего не найдено — значит, список нужно предложить выбрать.
   function assignedRoster(state, key, titleKey) {
-    return rosterById(state.rosters, state.roomAssignments?.[key]) ||
-      (titleKey ? rosterById(state.rosters, state.titleAssignments?.[titleKey]) : null) ||
-      null;
+    const byRoom = rosterById(state.rosters, state.roomAssignments?.[key]);
+    const byTitle = titleKey ? rosterById(state.rosters, state.titleAssignments?.[titleKey]) : null;
+    // Когда адрес общий для всех встреч, название встречи точнее.
+    return roomKeyIsSpecific(key) ? (byRoom || byTitle) : (byTitle || byRoom);
   }
 
   function rosterForRoom(state, key, titleKey) {
@@ -286,6 +323,8 @@
     rosterMode,
     roomTitle,
     roomTitleKey,
+    roomKeyIsSpecific,
+    rekeyByRoom,
     assignedRoster,
     rosterForRoom,
     participantMatchKeys,

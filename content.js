@@ -1290,7 +1290,28 @@
     }
   });
 
+  // Заголовок вкладки VirtualRoom проставляет не сразу: при заходе ключ встречи
+  // может быть ещё пустым, и привязка не находится. Ждём, когда заголовок
+  // появится, и перепроверяем.
+  function watchTitle() {
+    const title = document.querySelector("title");
+    if (!title) return;
+    new MutationObserver(() => {
+      reportedMeeting = "";
+      if (activeRoster) {
+        reportMeeting();
+        return;
+      }
+      loadActiveRoster().then(() => {
+        reportMeeting();
+        if (activeRoster) scheduleAutoScan();
+        else showRememberedResult();
+      });
+    }).observe(title, { childList: true, characterData: true, subtree: true });
+  }
+
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  watchTitle();
   Promise.all([loadActiveRoster(), VRMStorage.loadResults()]).then(([, results]) => {
     resultCache = results;
     watchUserActivity();

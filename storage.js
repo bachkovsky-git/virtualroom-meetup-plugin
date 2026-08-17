@@ -121,7 +121,9 @@
     }
 
     const validIds = new Set(rosters.map((roster) => roster.id));
-    const roomAssignments = onlyValid(stored.roomAssignments, validIds);
+    // Привязки могли быть записаны по старому ключу с одноразовыми частями
+    // адреса — пересчитываем на нынешний.
+    const roomAssignments = onlyValid(VRMeetups.rekeyByRoom(stored.roomAssignments), validIds);
     const titleAssignments = onlyValid(stored.titleAssignments, validIds);
     const selectedRosterId = validIds.has(stored.selectedRosterId)
       ? stored.selectedRosterId

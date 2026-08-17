@@ -96,6 +96,47 @@ check("лишние пробелы схлопываются",
 check("слишком короткое название не годится", VRMeetups.roomTitleKey("VR"), "");
 check("пустой заголовок не годится", VRMeetups.roomTitleKey(""), "");
 
+// Адрес комнаты VirtualRoom несёт одноразовые части: таймстамп против кеша и
+// идентификатор сессии. Без их удаления привязка не находится ни разу.
+const entryOne = "https://vr.example.com/room?_=1730180180958&userSession=dfcb46f1-f98f-4bcb-83f2-87da49fe077d";
+const entryTwo = "https://vr.example.com/room?_=1730180999111&userSession=99999999-0000-4bcb-83f2-87da49fe077d";
+check("повторный заход даёт тот же ключ", VRMeetups.roomKey(entryOne), VRMeetups.roomKey(entryTwo));
+check("одноразовые параметры выброшены", VRMeetups.roomKey(entryOne), "https://vr.example.com/room");
+check("осмысленные параметры остаются",
+  VRMeetups.roomKey("https://vr.example.com/room?id=42&_=17301801"), "https://vr.example.com/room?id=42");
+check("порядок параметров не важен",
+  VRMeetups.roomKey("https://vr.example.com/r?b=2&a=1"), VRMeetups.roomKey("https://vr.example.com/r?a=1&b=2"));
+check("фрагмент после # не учитывается",
+  VRMeetups.roomKey("https://vr.example.com/room#tab"), "https://vr.example.com/room");
+
+check("общий адрес не считается конкретным",
+  VRMeetups.roomKeyIsSpecific("https://vr.example.com/room"), false);
+check("адрес с идентификатором комнаты конкретен",
+  VRMeetups.roomKeyIsSpecific("https://vr.example.com/room/42"), true);
+check("адрес с параметром конкретен",
+  VRMeetups.roomKeyIsSpecific("https://vr.example.com/room?id=42"), true);
+
+check("старые привязки переезжают на новый ключ",
+  VRMeetups.rekeyByRoom({ [entryOne]: "r1" }), { "https://vr.example.com/room": "r1" });
+
+const genericState = {
+  rosters: [{ id: "r1", name: "Первый" }, { id: "r2", name: "Второй" }],
+  roomAssignments: { "https://vr.example.com/room": "r1" },
+  titleAssignments: { "дейли alpha": "r2" }
+};
+check("при общем адресе выигрывает название встречи",
+  VRMeetups.assignedRoster(genericState, "https://vr.example.com/room", "дейли alpha")?.id, "r2");
+check("при общем адресе без названия остаётся привязка по адресу",
+  VRMeetups.assignedRoster(genericState, "https://vr.example.com/room", "")?.id, "r1");
+
+const specificState = {
+  rosters: [{ id: "r1", name: "Первый" }, { id: "r2", name: "Второй" }],
+  roomAssignments: { "https://vr.example.com/room/42": "r1" },
+  titleAssignments: { "дейли alpha": "r2" }
+};
+check("при конкретном адресе выигрывает адрес",
+  VRMeetups.assignedRoster(specificState, "https://vr.example.com/room/42", "дейли alpha")?.id, "r1");
+
 check("название встречи без счётчика непрочитанного",
   VRMeetups.roomTitle("(3) Alpha Daily — VirtualRoom"), "Alpha Daily");
 check("название встречи без хвоста приложения",
