@@ -317,7 +317,7 @@
     return null;
   }
 
-  function memberFromUser(user, status) {
+  function memberFromUser(user, status, now = Date.now()) {
     return {
       id: user?.id || "",
       username: String(user?.username || ""),
@@ -327,7 +327,7 @@
       manual: Boolean(status?.manual),
       lastActivityAt: Number(status?.last_activity_at) || 0,
       dndEndTime: Number(status?.dnd_end_time) || 0,
-      customStatus: parseCustomStatus(user)
+      customStatus: parseCustomStatus(user, now)
     };
   }
 
