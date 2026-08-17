@@ -535,7 +535,7 @@
       const aliasesInput = document.createElement("input");
       aliasesInput.type = "text";
       aliasesInput.value = row.aliases.join(", ");
-      aliasesInput.placeholder = "Lipanti Nick, другой ник";
+      aliasesInput.placeholder = "Kuznetsoff Nick, другой ник";
       aliasesInput.addEventListener("input", () => {
         row.aliases = aliasesInput.value.split(/[,;\n]+/).map((value) => value.trim()).filter(Boolean);
         const key = VRMeetups.comparisonKey(row.name);

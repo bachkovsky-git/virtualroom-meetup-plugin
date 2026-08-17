@@ -308,7 +308,7 @@ check("срок статуса на сегодня", VRMattermost.formatExpiry(n
 const members = [
   VRMattermost.memberFromUser(user, { status: "offline", last_activity_at: now - 3600000 }, now),
   VRMattermost.memberFromUser(
-    { id: "u2", username: "lipanti.nick", first_name: "Липатников", last_name: "Никита", props: {} },
+    { id: "u2", username: "kuznetsov.nick", first_name: "Кузнецов", last_name: "Никита", props: {} },
     { status: "online" },
     now
   )
@@ -319,7 +319,7 @@ check("иконка статуса", VRMattermost.memberIcon(members[0]), "🌴"
 check("без статуса иконки нет", VRMattermost.memberIcon(members[1]), null);
 
 const applied = VRMattermost.applySnapshot({ aliases: { [VRMeetups.comparisonKey("Иванов Иван")]: ["Ivan I."] } }, members);
-check("состав из канала", applied.participants, ["Иванов Иван", "Липатников Никита"]);
+check("состав из канала", applied.participants, ["Иванов Иван", "Кузнецов Никита"]);
 check("ручной псевдоним сохранён, логин добавлен",
   applied.aliases[VRMeetups.comparisonKey("Иванов Иван")], ["Ivan I.", "ivan.ivanov"]);
 check("повторный импорт ничего не меняет",
@@ -327,7 +327,7 @@ check("повторный импорт ничего не меняет",
 
 const byKey = VRMattermost.membersByKey(members);
 check("поиск по имени", byKey.get(VRMeetups.comparisonKey("Иван Иванов")).id, "u1");
-check("поиск по логину", byKey.get(VRMeetups.comparisonKey("lipanti.nick")).id, "u2");
+check("поиск по логину", byKey.get(VRMeetups.comparisonKey("kuznetsov.nick")).id, "u2");
 
 // --- mattermost.js: порядок каналов ----------------------------------------
 
@@ -357,7 +357,7 @@ const roster = { participants: applied.participants, aliases: applied.aliases };
 check("человек найден по логину из Mattermost",
   VRMeetups.participantIsPresent(roster, "Иванов Иван", ["ivan.ivanov"]), true);
 check("отсутствующий не найден",
-  VRMeetups.participantIsPresent(roster, "Липатников Никита", ["ivan.ivanov"]), false);
+  VRMeetups.participantIsPresent(roster, "Кузнецов Никита", ["ivan.ivanov"]), false);
 
 console.log(failures ? `\n${failures} из ${checks} проверок не прошли` : `Все ${checks} проверок прошли`);
 process.exit(failures ? 1 : 0);
