@@ -253,6 +253,9 @@ textarea.readonly {
   background: #f1f4f5;
 }
 
+#simple-editor { margin-bottom: 14px; }
+#simple-editor .hint { margin-bottom: 0; }
+
 .highlight-setting { margin: 0 0 14px; }
 .editor-mode-setting { margin: 0 0 13px; }
 

@@ -321,7 +321,9 @@
     const rows = Object.entries(draftAliases).flatMap(([key, aliases]) =>
       (aliases || []).map((alias) => ({ key, name: namesByKey.get(key) || key, alias }))
     );
-    aliasesBlock.hidden = rows.length === 0;
+    // В режиме канала в псевдонимы автоматически попадают логины всех
+    // участников — показывать этот список бессмысленно.
+    aliasesBlock.hidden = rows.length === 0 || isMattermostMode();
 
     rows.forEach(({ key, name, alias }) => {
       const row = document.createElement("div");
