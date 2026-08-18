@@ -849,8 +849,10 @@
     } else {
       rosterText.value = VRMeetups.parseExpected(detailedRows.map((row) => row.name).join("\n")).join("\n");
     }
-    applyEditorMode();
+    // applyEditorMode выставляет флажок из state.detailedEditor, поэтому
+    // сначала записываем новое значение, иначе клик откатится.
     state = await VRMStorage.patch({ detailedEditor: detailedToggle.checked });
+    applyEditorMode();
   });
   rosterText.addEventListener("input", updateRosterCount);
   deleteButton.addEventListener("click", () => deleteRoster().catch((error) => showStatus(error.message, "error")));
