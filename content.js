@@ -986,14 +986,19 @@
         roster: activeRoster.name,
         collapsed: state.missingCollapsed === true,
         notice: mmNotice,
-        hint: editorHint,
-        stale
+        hint: editorHint
       }
     );
     const existing = document.getElementById(MISSING_ID);
     // Пока показывать нечего нового, DOM не трогаем: иначе раздел мигает
-    // при каждой проверке и при обновлении статусов.
-    if (existing && existing.parentElement === panel.listContainer && signature === lastRenderSignature) return;
+    // при каждой проверке и при обновлении статусов. Признак «данные из кеша»
+    // в сигнатуру не входит: переход кеш → идентичные свежие данные обновляет
+    // только класс, а не пересобирает блок — пересборка меняла высоту блока
+    // над скроллером, и список под ним прыгал.
+    if (existing && existing.parentElement === panel.listContainer && signature === lastRenderSignature) {
+      existing.classList.toggle("vrm-is-stale", stale === true);
+      return;
+    }
     lastRenderSignature = signature;
 
     closeStatusMenu();
