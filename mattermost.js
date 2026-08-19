@@ -417,6 +417,47 @@
     return map;
   }
 
+  // Кого звать в канал: отсутствующие без активного статуса. Свой статус
+  // участника важнее статуса из Mattermost — тот же приоритет, что у строк
+  // раздела «Не пришли». Истёкшие статусы из Mattermost отброшены ещё при
+  // сборке снапшота.
+  function pingTargets(missingNames, members, statuses, today) {
+    const byKey = membersByKey(members);
+    const findMember = (name) => {
+      const key = VRMeetups.comparisonKey(name);
+      if (byKey.has(key)) return byKey.get(key);
+      for (const [memberKey, member] of byKey) {
+        if (VRMeetups.namesMatch(memberKey, key)) return member;
+      }
+      return null;
+    };
+    const mentions = [];
+    const excused = [];
+    (missingNames || []).forEach((name) => {
+      const own = statuses?.[VRMeetups.comparisonKey(name)];
+      if (VRMeetups.statusIsActive(own, today)) {
+        excused.push({ name, reason: own.type === "vacation" ? "в отпуске" : "отсутствует" });
+        return;
+      }
+      const member = findMember(name);
+      if (member?.customStatus) {
+        excused.push({ name, reason: member.customStatus.label || member.customStatus.text || "статус" });
+        return;
+      }
+      mentions.push({ name, username: member?.username || null });
+    });
+    return { mentions, excused };
+  }
+
+  // Участник без члена канала упоминается просто по имени: тегнуть некого,
+  // но людям в канале всё равно видно, кого ждут.
+  function pingMessage(mentions, meetingName) {
+    if (!Array.isArray(mentions) || !mentions.length) return "";
+    const tags = mentions.map((item) => (item.username ? `@${item.username}` : item.name)).join(" ");
+    const title = String(meetingName || "").trim();
+    return title ? `Ждём вас на встрече «${title}»: ${tags}` : `Ждём вас на встрече: ${tags}`;
+  }
+
   root.VRMattermost = {
     EMOJI,
     KIND_RULES,
@@ -440,6 +481,8 @@
     compareChannels,
     sourceKey,
     isMattermost,
+    pingTargets,
+    pingMessage,
     applySnapshot,
     membersByKey
   };

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VirtualRoom — контроль участников",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "minimum_chrome_version": "111",
   "description": "Сравнивает список приглашённых со списком участников VirtualRoom и показывает тех, кто не пришёл. Состав и статусы можно брать из канала Mattermost.",
   "permissions": ["storage", "activeTab", "cookies"],

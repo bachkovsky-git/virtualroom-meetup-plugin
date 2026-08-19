@@ -7,6 +7,7 @@
   const MISSING_ID = "vrm-attendance-missing";
   const STATUS_MENU_ID = "vrm-attendance-status-menu";
   const GEAR_PATH = "m14.54 7.37 1.065-.58a.755.755 0 0 0 .366-.873c-.366-1.356-1.132-2.583-2.13-3.584-.266-.226-.666-.29-.965-.13l-1.065.614a4.5 4.5 0 0 0-1.098-.613V1.009c0-.355-.233-.646-.6-.743a8.5 8.5 0 0 0-4.226 0c-.366.097-.6.388-.6.743v1.195a4.5 4.5 0 0 0-1.098.613l-1.065-.613c-.3-.162-.699-.097-.965.129C1.161 3.334.395 4.561.03 5.917c-.1.355.067.71.366.872l1.065.581c-.033.226-.033.42-.033.646 0 .194 0 .388.033.581l-1.065.614a.755.755 0 0 0-.366.872c.366 1.356 1.132 2.583 2.13 3.584.266.226.666.29.965.13l1.065-.614c.333.258.7.452 1.099.613v1.195c0 .355.233.646.599.743a8.5 8.5 0 0 0 4.226 0c.367-.097.6-.388.6-.743v-1.195c.399-.161.765-.355 1.098-.613l1.065.613c.3.162.699.097.965-.129.998-1.001 1.764-2.228 2.13-3.584a.755.755 0 0 0-.366-.872l-1.065-.614a7.6 7.6 0 0 0 0-1.227m-1.764 2.067 1.464.807c-.266.678-.632 1.324-1.131 1.873l-1.465-.807c-1.065.872-1.198.968-2.53 1.42v1.647a6.4 6.4 0 0 1-2.229 0v-1.646c-1.331-.453-1.498-.55-2.53-1.421l-1.464.807c-.499-.549-.865-1.195-1.131-1.873l1.464-.807c-.266-1.356-.266-1.518 0-2.874L1.76 5.756c.266-.678.632-1.324 1.131-1.873l1.465.807c1.065-.872 1.198-.969 2.53-1.42V1.622a6.4 6.4 0 0 1 2.229 0v1.646c1.331.452 1.498.55 2.53 1.421l1.464-.807c.499.549.865 1.195 1.131 1.873l-1.464.807c.266 1.356.266 1.518 0 2.874m-4.76-4.553c-1.763 0-3.194 1.42-3.194 3.1 0 1.711 1.43 3.1 3.195 3.1 1.73 0 3.195-1.389 3.195-3.1 0-1.68-1.465-3.1-3.195-3.1m0 4.65c-.898 0-1.597-.678-1.597-1.55 0-.84.699-1.55 1.598-1.55.865 0 1.597.71 1.597 1.55 0 .872-.732 1.55-1.597 1.55";
+  const PING_PATH = "M13.8.9 6.6 4.1H3A2 2 0 0 0 1 6.1v3.4a2 2 0 0 0 2 2h.4l.9 3c.1.4.5.7.9.7h1c.6 0 1-.6.9-1.1l-.7-2.4 7.4 3.3c.6.3 1.2-.2 1.2-.8V1.7c0-.6-.6-1-1.2-.8zM13 12.6 6.9 9.9H3a.6.6 0 0 1-.6-.6V6.1c0-.3.3-.6.6-.6h3.9L13 2.8z";
   const AUTO_SCAN_DELAY = 1200;
   const ROOM_NAME_SELECTORS = [
     '[class*="RoomName"]',
@@ -472,6 +473,8 @@
     menu.append(heading);
 
     state.rosters.forEach((roster) => {
+      const row = document.createElement("div");
+      row.className = "vrm-roster-row";
       const item = document.createElement("button");
       item.type = "button";
       item.className = "vrm-status-option vrm-roster-option";
@@ -486,7 +489,24 @@
       label.textContent = roster.name;
       item.append(icon, label);
       item.addEventListener("click", () => chooseRoster(roster.id));
-      menu.append(item);
+
+      // Шестерёнка живёт у каждого списка, а не в шапке: там она занимала
+      // место, полезное названию встречи.
+      const gear = document.createElement("button");
+      gear.type = "button";
+      gear.className = "vrm-roster-gear";
+      gear.title = `Настроить «${roster.name}» в окне расширения`;
+      gear.setAttribute("aria-label", gear.title);
+      gear.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="${GEAR_PATH}" clip-rule="evenodd"></path></svg>`;
+      gear.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeStatusMenu();
+        openEditor({ rosterId: roster.id });
+      });
+
+      row.append(item, gear);
+      menu.append(row);
     });
 
     const separator = document.createElement("div");
@@ -533,43 +553,178 @@
     return button;
   }
 
-  function createGearButton() {
+  // Плашка в блоке «Не пришли»: сообщение показывается и через 15 секунд
+  // гаснет само.
+  function showBlockHint(text) {
+    editorHint = text;
+    redrawBlock();
+    clearTimeout(editorHintTimer);
+    editorHintTimer = setTimeout(() => {
+      editorHint = "";
+      redrawBlock();
+    }, 15000);
+  }
+
+  function createPingButton() {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "vrm-settings-button";
-    button.title = "Настроить список в окне расширения";
+    button.className = "vrm-ping-button";
+    button.title = "Позвать отсутствующих в канал Mattermost";
     button.setAttribute("aria-label", button.title);
-    button.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill-rule="evenodd" d="${GEAR_PATH}" clip-rule="evenodd"></path></svg>`;
-    button.addEventListener("click", (event) => {
+    button.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="${PING_PATH}"></path></svg>`;
+    button.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      openEditor(activeRoster ? { rosterId: activeRoster.id } : { blank: true });
+      if (statusMenuAnchor === button) {
+        closeStatusMenu();
+        return;
+      }
+      button.classList.add("vrm-is-busy");
+      try {
+        await showPingMenu(button);
+      } finally {
+        button.classList.remove("vrm-is-busy");
+      }
     });
     return button;
   }
 
-  function createMattermostButton() {
+  // Предпросмотр перед отправкой: сообщение уходит в канал на всех, поэтому
+  // текст показывается заранее и его можно поправить.
+  async function showPingMenu(anchor) {
+    // Пинг собирается из того, что пользователь видит прямо сейчас: имена
+    // последней проверки, а пока их нет — кешированные строки раздела.
+    // Идущая проверка или запрос в Mattermost ничего не блокируют.
+    let missing;
+    if (lastActualNames.size) {
+      const actualKeys = new Set(lastActualNames.keys());
+      missing = activeRoster.participants.filter(
+        (name) => !VRMeetups.participantIsPresent(activeRoster, name, actualKeys)
+      );
+    } else {
+      missing = (resultCache[currentResultKey()]?.rows || []).map((row) => row.name);
+    }
+    // Снапшот канала нужен для логинов и статусов; на холодной странице его
+    // может ещё не быть — единственный случай, когда клик ждёт сеть.
+    if (!mmSnapshot?.members) await refreshMattermost(false);
+    if (!mmSnapshot?.members) {
+      showBlockHint(mmNotice || "Не удалось получить состав канала Mattermost.");
+      return;
+    }
+    // Пока собирались данные, блок мог перерисоваться и заменить кнопку —
+    // меню привязывается к живому узлу.
+    anchor = document.querySelector("#vrm-attendance-missing .vrm-ping-button") || anchor;
+    const { mentions, excused } = VRMattermost.pingTargets(
+      missing, mmSnapshot.members, activeRoster.statuses, VRMeetups.localDateISO()
+    );
+    const channel = activeRoster.source.channelDisplayName || activeRoster.source.channelName || "Mattermost";
+
+    closeStatusMenu();
+    const menu = document.createElement("div");
+    menu.id = STATUS_MENU_ID;
+    menu.className = "vrm-ping-menu";
+    menu.setAttribute("data-vrm-extension", "true");
+    menu.setAttribute("role", "dialog");
+    menu.setAttribute("aria-label", "Позвать отсутствующих");
+
+    const heading = document.createElement("div");
+    heading.className = "vrm-status-heading";
+    heading.textContent = "Позвать отсутствующих";
+    menu.append(heading);
+
+    if (!mentions.length) {
+      const empty = document.createElement("div");
+      empty.className = "vrm-status-empty";
+      empty.textContent = missing.length
+        ? "Пинговать некого: у всех отсутствующих активен статус."
+        : "Все ожидаемые уже на встрече.";
+      menu.append(empty);
+      placeStatusMenu(menu, anchor, ".vrm-status-empty");
+      return;
+    }
+
+    const form = document.createElement("div");
+    form.className = "vrm-status-range";
+    const textarea = document.createElement("textarea");
+    textarea.className = "vrm-ping-text";
+    textarea.setAttribute("aria-label", "Текст сообщения");
+    textarea.value = VRMattermost.pingMessage(mentions, activeRoster.name);
+    // Высота подстраивается под текст: со списком упоминаний он легко
+    // выходит за пару строк. Потолок — 40% экрана, дальше прокрутка.
+    const autosize = () => {
+      if (CSS.supports("field-sizing", "content")) return; // браузер растит поле сам
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight + 4, window.innerHeight * 0.4)}px`;
+    };
+    textarea.addEventListener("input", autosize);
+    form.append(textarea);
+
+    if (excused.length) {
+      const note = document.createElement("div");
+      note.className = "vrm-ping-note";
+      note.textContent = `Не пингуем: ${excused.map((item) => `${item.name} (${item.reason})`).join(", ")}`;
+      note.title = note.textContent;
+      form.append(note);
+    }
+
+    const send = document.createElement("button");
+    send.type = "button";
+    send.className = "vrm-status-range-apply";
+    send.textContent = `Отправить в канал «${channel}»`;
+    send.addEventListener("click", async () => {
+      if (!textarea.value.trim()) {
+        textarea.setCustomValidity("Сообщение пустое");
+        textarea.reportValidity();
+        return;
+      }
+      textarea.setCustomValidity("");
+      send.disabled = true;
+      let response;
+      try {
+        response = await chrome.runtime.sendMessage({
+          type: "VRM_MM_POST",
+          source: activeRoster.source,
+          message: textarea.value
+        });
+      } catch (_error) {
+        response = null;
+      }
+      if (response?.ok) {
+        closeStatusMenu();
+        showBlockHint(`Сообщение отправлено в канал «${response.channel || channel}».`);
+        return;
+      }
+      send.disabled = false;
+      textarea.setCustomValidity(response?.message || "Не удалось отправить сообщение.");
+      textarea.reportValidity();
+      textarea.setCustomValidity("");
+    });
+    form.append(send);
+    menu.append(form);
+    // Высоту можно померить только в DOM, а позиция меню считается от его
+    // размера — поэтому меню сначала добавляется (placeStatusMenu просто
+    // переставит тот же узел), затем растягивается поле, затем позиция.
+    document.documentElement.append(menu);
+    autosize();
+    placeStatusMenu(menu, anchor, ".vrm-ping-text");
+    // Первый замер мог пройти до окончательной раскладки (шрифты, ширина) —
+    // после отрисовки кадра высота уточняется ещё раз.
+    requestAnimationFrame(autosize);
+  }
+
+  // Кнопки обновления в шапке нет: данные приходят сами, а о фоновой загрузке
+  // говорит переливающийся заголовок раздела. «!» появляется только при
+  // ошибке Mattermost и повторяет запрос по клику.
+  function createWarningButton() {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "vrm-mattermost-button";
-    const channel = activeRoster.source.channelDisplayName || activeRoster.source.channelName;
-    if (mmNotice) {
-      button.classList.add("vrm-has-warning");
-      button.textContent = "!";
-      button.title = `${mmNotice} Нажмите, чтобы повторить.`;
-    } else {
-      const synced = mmSnapshot?.fetchedAt
-        ? new Date(mmSnapshot.fetchedAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
-        : "—";
-      button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5V.8L4.6 3.2 8 5.6V3.9a4.1 4.1 0 1 1-4 5l-1.4.4A5.5 5.5 0 1 0 8 2.5z"></path></svg>';
-      button.title = `Канал Mattermost «${channel}», обновлено в ${synced}. Нажмите, чтобы обновить состав и статусы`;
-    }
+    button.className = "vrm-warning-button";
+    button.textContent = "!";
+    button.title = `${mmNotice} Нажмите, чтобы повторить.`;
     button.setAttribute("aria-label", button.title);
     button.addEventListener("click", async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      // Вращение включается сразу: самая долгая часть — запрос в Mattermost,
-      // и раньше она проходила без анимации, кнопка лишь гасла.
       button.classList.add("vrm-is-busy");
       markRefreshing(true);
       try {
@@ -577,6 +732,8 @@
         await scanParticipants(activeRoster?.id);
       } finally {
         markRefreshing(false);
+        // Если ошибка не ушла, сигнатура не меняется и кнопка живёт дальше —
+        // без снятия класса она осталась бы заблокированной.
         button.classList.remove("vrm-is-busy");
       }
     });
@@ -968,10 +1125,7 @@
     const label = document.createElement("span");
     label.className = "vrm-missing-label";
     label.textContent = "Список не выбран";
-    const actions = document.createElement("div");
-    actions.className = "vrm-header-actions";
-    actions.append(createGearButton());
-    header.append(label, actions);
+    header.append(label);
 
     const body = document.createElement("div");
     body.className = "vrm-missing-body vrm-prompt-body";
@@ -1063,14 +1217,16 @@
     const count = document.createElement("span");
     count.className = "vrm-missing-count";
     count.textContent = `${rows.length}/${total}`;
-    // Отдельного значка обновления в шапке нет: пока идёт проверка, крутится
-    // сама кнопка обновления слева от шестерёнки.
+    // Отдельного значка обновления в шапке нет: пока идёт проверка или показан
+    // кеш, переливается сам заголовок «Не пришли».
     const rosterLabel = createRosterButton();
 
     const actions = document.createElement("div");
     actions.className = "vrm-header-actions";
-    if (VRMattermost.isMattermost(activeRoster)) actions.append(createMattermostButton());
-    actions.append(createGearButton());
+    if (VRMattermost.isMattermost(activeRoster)) {
+      if (rows.length) actions.append(createPingButton());
+      if (mmNotice) actions.append(createWarningButton());
+    }
     header.append(createCollapseButton(section), label, count, rosterLabel, actions);
     section.append(header);
     if (editorHint) section.append(createEditorHint());
@@ -1145,13 +1301,7 @@
     if (response?.ok && !response.needsClick) return;
 
     // Сюда попадаем только если не открылось ни панель, ни окно.
-    editorHint = "Не удалось открыть редактор. Нажмите значок расширения — список уже выбран.";
-    redrawBlock();
-    clearTimeout(editorHintTimer);
-    editorHintTimer = setTimeout(() => {
-      editorHint = "";
-      redrawBlock();
-    }, 15000);
+    showBlockHint("Не удалось открыть редактор. Нажмите значок расширения — список уже выбран.");
   }
 
   // Высота области — вещь, которую пользователь настраивает один раз и ждёт,
@@ -1346,7 +1496,10 @@
       watchUserActivity();
       // Раз на странице есть панель участников — это VirtualRoom, пора
       // подключать источник из клиента. Повторные вызовы идемпотентны.
-      if (findPanel()) VRMSource.start();
+      if (findPanel()) {
+        VRMSource.start();
+        watchSourcesForDev();
+      }
       // Панель могли только что открыть: блок возвращается из кеша сразу,
       // не дожидаясь проверки.
       showRememberedResult();
@@ -1375,6 +1528,61 @@
     }).observe(title, { childList: true, characterData: true, subtree: true });
   }
 
+  // --- Горячая перезагрузка для разработки --------------------------------
+  // Распакованное расширение Chrome читает с диска, поэтому во время
+  // разработки не нужно перезагружать страницу руками: правка content.css
+  // применяется на живой странице примерно за секунду, правка JS сама
+  // обновляет вкладку. Запускается только на странице со встречей и только
+  // у распакованной сборки (у магазинной есть update_url).
+  let devWatchStarted = false;
+  function watchSourcesForDev() {
+    if (devWatchStarted || chrome.runtime.getManifest().update_url) return;
+    devWatchStarted = true;
+
+    const files = [
+      "content.css", "content.js", "common.js", "mattermost.js",
+      "storage.js", "bridge.js", "participants-source.js", "page-hook.js"
+    ];
+    const seen = new Map();
+    let styleTag = null;
+
+    const applyCss = (text) => {
+      if (!styleTag || !styleTag.isConnected) {
+        styleTag = document.createElement("style");
+        styleTag.setAttribute("data-vrm-extension", "true");
+        document.documentElement.append(styleTag);
+      }
+      styleTag.textContent = text;
+    };
+
+    const tick = async () => {
+      for (const file of files) {
+        let response;
+        try {
+          response = await chrome.runtime.sendMessage({ type: "VRM_DEV_FILE", file });
+        } catch (error) {
+          // Контекст умер — расширение перезагрузили на chrome://extensions.
+          // Свежие скрипты приедут вместе со страницей.
+          window.location.reload();
+          return;
+        }
+        if (!response?.ok) continue;
+        const previous = seen.get(file);
+        seen.set(file, response.text);
+        if (previous === undefined || previous === response.text) continue;
+        if (file === "content.css") applyCss(response.text);
+        else {
+          // Перезагрузка вкладки не помогает: Chrome отдаёт content-скрипты
+          // из памяти. Перезагружается расширение — наш контекст умрёт, и
+          // следующий тик, поймав это, обновит вкладку уже со свежим кодом.
+          chrome.runtime.sendMessage({ type: "VRM_DEV_RELOAD" }).catch(() => {});
+        }
+      }
+      setTimeout(tick, 1000);
+    };
+    tick();
+  }
+
   // Вход и выход участников приходят из page-hook событиями — раздел
   // обновляется сразу, без прокрутки и без ожидания автопроверки.
   let hookNamesTimer = 0;
@@ -1388,7 +1596,13 @@
   Promise.all([loadActiveRoster(), VRMStorage.loadResults()]).then(([, results]) => {
     resultCache = results;
     watchUserActivity();
-    if (findPanel()) VRMSource.start();
+    if (findPanel()) {
+      VRMSource.start();
+      watchSourcesForDev();
+    }
+    // Снапшот канала прогревается заранее: единственная сетевая пауза при
+    // клике по пингу — холодный снапшот, и лучше прожить её при загрузке.
+    if (mattermostLinked()) refreshMattermost(false).catch(() => {});
     showRememberedResult();
     updatePresentMarkers();
     if (activeRoster && findPanel()) scheduleAutoScan();

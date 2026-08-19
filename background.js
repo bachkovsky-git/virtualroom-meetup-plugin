@@ -267,6 +267,38 @@ const handlers = {
   async VRM_MM_SNAPSHOT({ source, force }) {
     return getSnapshot(source, force === true);
   },
+  // Горячая перезагрузка при разработке: распакованное расширение Chrome
+  // читает с диска, поэтому свежий текст файла можно раздавать без
+  // перезагрузки самого расширения. В магазинной сборке не используется.
+  async VRM_DEV_FILE({ file }) {
+    const allowed = [
+      "content.css", "content.js", "common.js", "mattermost.js",
+      "storage.js", "bridge.js", "participants-source.js", "page-hook.js"
+    ];
+    if (!allowed.includes(file)) throw new MMError("Неизвестный файл.", "config");
+    const response = await fetch(chrome.runtime.getURL(file));
+    return { text: await response.text() };
+  },
+  // Chrome держит content-скрипты в памяти до перезагрузки расширения, поэтому
+  // при изменении JS перезагружается расширение целиком: контексты на
+  // страницах умирают, их наблюдатели сами обновляют вкладки — уже со свежим
+  // кодом. В магазинной сборке не используется.
+  async VRM_DEV_RELOAD() {
+    if (!chrome.runtime.getManifest().update_url) chrome.runtime.reload();
+    return {};
+  },
+  // Пост уходит от имени вошедшего пользователя: используется его же сессия.
+  async VRM_MM_POST({ source, message }) {
+    const text = String(message || "").trim();
+    if (!text) throw new MMError("Пустое сообщение не отправлено.", "config");
+    const baseUrl = VRMattermost.normalizeBaseUrl(source?.baseUrl);
+    const channel = await fetchChannel(baseUrl, source || {});
+    const post = await request(baseUrl, "/posts", {
+      method: "POST",
+      body: { channel_id: channel.id, message: text }
+    });
+    return { postId: post.id, channel: channel.display_name || channel.name || "" };
+  },
   async VRM_MM_ACCESS({ baseUrl }) {
     return { granted: await hasAccess(baseUrl) };
   },

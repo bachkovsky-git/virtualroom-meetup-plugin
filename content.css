@@ -42,8 +42,11 @@
   line-height: 1.2;
 }
 
+/* Контрастные цвета шапки — из шкалы серых клиента VirtualRoom: панель
+   светлая, поэтому «ярче» значит темнее. Заголовки у клиента — black-500. */
 #vrm-attendance-missing .vrm-missing-label {
   flex: 0 0 auto;
+  color: #2a3335;
   font-weight: 700;
 }
 
@@ -77,42 +80,44 @@
 #vrm-attendance-missing .vrm-missing-count {
   flex: 0 0 auto;
   margin-left: 5px;
-  color: #748287;
+  color: #425052;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
-/* Пока идёт обновление, ничего нового в шапке не появляется — крутится сама
-   кнопка обновления. Оборот с разгоном и торможением выглядит спокойнее
-   равномерного вращения. */
-#vrm-attendance-missing.vrm-is-stale .vrm-mattermost-button svg,
-#vrm-attendance-missing.vrm-is-refreshing .vrm-mattermost-button svg,
-#vrm-attendance-missing .vrm-mattermost-button.vrm-is-busy svg {
-  animation: vrm-spin 1.4s cubic-bezier(0.65, 0.05, 0.36, 1) infinite;
-  transform-origin: 50% 50%;
+/* Пока показан кеш или идёт проверка, ничего нового в шапке не появляется —
+   переливается сам заголовок: светло-серый блик по тёмному тексту
+   («перламутр» на светлой панели). */
+#vrm-attendance-missing.vrm-is-stale .vrm-missing-label,
+#vrm-attendance-missing.vrm-is-refreshing .vrm-missing-label {
+  background-image: linear-gradient(90deg, #2a3335 32%, #8e9ca0 50%, #2a3335 68%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: vrm-shimmer 2.4s ease-in-out infinite;
 }
 
-#vrm-attendance-missing.vrm-is-stale .vrm-mattermost-button,
-#vrm-attendance-missing.vrm-is-refreshing .vrm-mattermost-button,
-#vrm-attendance-missing .vrm-mattermost-button.vrm-is-busy {
-  color: #35bd7d;
-}
-
-@keyframes vrm-spin {
-  0% { transform: rotate(0deg); }
-  60% { transform: rotate(360deg); }
-  100% { transform: rotate(360deg); }
+@keyframes vrm-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #vrm-attendance-missing .vrm-mattermost-button svg { animation: none; }
+  #vrm-attendance-missing .vrm-missing-label {
+    animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
+    color: #2a3335;
+  }
 }
 
 #vrm-attendance-missing .vrm-roster-name {
   min-width: 0;
   margin-left: 7px;
   overflow: hidden;
-  color: #718087;
+  color: #425052;
   font-size: 12px;
   font-weight: 400;
   text-overflow: ellipsis;
@@ -139,8 +144,8 @@
    кнопок по-своему, и одного правила на кнопке не хватает. */
 #vrm-attendance-missing .vrm-roster-switch,
 #vrm-attendance-missing .vrm-roster-switch span {
-  color: #a9b6bb !important;
-  -webkit-text-fill-color: #a9b6bb !important;
+  color: #425052 !important;
+  -webkit-text-fill-color: #425052 !important;
 }
 
 /* Длинное название обрезается, а стрелка остаётся на виду. */
@@ -165,12 +170,17 @@
   -webkit-text-fill-color: #ffffff !important;
 }
 
+/* Подсветка выпадайки заметно темнее фона панели, нажатие — ещё темнее. */
 #vrm-attendance-missing .vrm-roster-switch:hover,
 #vrm-attendance-missing .vrm-roster-switch:focus-visible {
-  background: rgba(142, 156, 160, 0.32) !important;
+  background: #121516 !important;
 }
 
-#vrm-attendance-missing.vrm-is-prompt .vrm-missing-header { color: #b9c4c8; }
+#vrm-attendance-missing .vrm-roster-switch:active {
+  background: #000000 !important;
+}
+
+#vrm-attendance-missing.vrm-is-prompt .vrm-missing-header { color: #425052; }
 
 #vrm-attendance-missing .vrm-editor-hint {
   margin: 0 12px 8px;
@@ -209,7 +219,7 @@
   padding: 7px 11px !important;
   color: #fff !important;
   -webkit-text-fill-color: #fff !important;
-  background: #20a66a !important;
+  background: #43ba16 !important;
   opacity: 1 !important;
   cursor: pointer !important;
   font: 700 12px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
@@ -217,7 +227,7 @@
   text-shadow: none !important;
 }
 
-#vrm-attendance-missing .vrm-prompt-button:hover { background: #178b58 !important; }
+#vrm-attendance-missing .vrm-prompt-button:hover { background: #2b9b0e !important; }
 
 #vrm-attendance-missing .vrm-prompt-button:focus-visible {
   outline: 2px solid rgba(255, 255, 255, 0.65);
@@ -231,7 +241,8 @@
   margin-left: auto;
 }
 
-#vrm-attendance-missing .vrm-mattermost-button {
+#vrm-attendance-missing .vrm-warning-button,
+#vrm-attendance-missing .vrm-ping-button {
   display: grid;
   width: 24px;
   height: 24px;
@@ -246,22 +257,24 @@
   font: 700 12px inherit;
 }
 
-#vrm-attendance-missing .vrm-mattermost-button:hover {
+#vrm-attendance-missing .vrm-warning-button:hover,
+#vrm-attendance-missing .vrm-ping-button:hover {
   color: #fff;
-  background: rgba(142, 156, 160, 0.22);
+  background: #121516;
 }
 
-#vrm-attendance-missing .vrm-mattermost-button svg {
+#vrm-attendance-missing .vrm-ping-button svg {
   width: 14px;
   height: 14px;
   fill: currentColor;
 }
 
-#vrm-attendance-missing .vrm-mattermost-button.vrm-has-warning { color: #e0a13c; }
+#vrm-attendance-missing .vrm-warning-button { color: #e0a13c; }
 
-/* Во время обновления кнопка не гаснет — она вращается, а повторные нажатия
-   просто не проходят. */
-#vrm-attendance-missing .vrm-mattermost-button.vrm-is-busy {
+/* Во время обновления кнопка не гаснет — занятость видна по переливу
+   заголовка, а повторные нажатия просто не проходят. */
+#vrm-attendance-missing .vrm-warning-button.vrm-is-busy,
+#vrm-attendance-missing .vrm-ping-button.vrm-is-busy {
   pointer-events: none;
 }
 
@@ -274,7 +287,7 @@
   white-space: nowrap;
 }
 
-#vrm-attendance-missing .vrm-presence-online { color: #35bd7d; }
+#vrm-attendance-missing .vrm-presence-online { color: #43ba16; }
 #vrm-attendance-missing .vrm-presence-away { color: #d8a24a; }
 #vrm-attendance-missing .vrm-presence-dnd { color: #d1706b; }
 
@@ -282,28 +295,56 @@
   background: rgba(142, 156, 160, 0.34);
 }
 
-#vrm-attendance-missing .vrm-settings-button {
+/* Шестерёнка живёт в меню списков, напротив каждого пункта. Подсвечивается
+   строка целиком, а не имя и шестерёнка по отдельности. */
+#vrm-attendance-status-menu .vrm-roster-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+}
+
+/* Подсветка по фокусу — только клавиатурная (:focus-visible): меню при
+   открытии программно фокусирует первый пункт, и с :focus-within он выглядел
+   бы постоянно выделенным. */
+#vrm-attendance-status-menu .vrm-roster-row:hover,
+#vrm-attendance-status-menu .vrm-roster-row:has(:focus-visible) {
+  background: #425052;
+}
+
+#vrm-attendance-status-menu .vrm-roster-row .vrm-status-option:hover,
+#vrm-attendance-status-menu .vrm-roster-row .vrm-status-option:active {
+  background: transparent;
+}
+
+#vrm-attendance-status-menu .vrm-roster-row .vrm-status-option {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+#vrm-attendance-status-menu .vrm-roster-gear {
   display: grid;
-  width: 26px;
-  height: 26px;
-  flex: 0 0 26px;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
   place-items: center;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   padding: 0;
   color: #8e9ca0;
   background: transparent;
   cursor: pointer;
 }
 
-#vrm-attendance-missing .vrm-settings-button:hover {
+#vrm-attendance-status-menu .vrm-roster-gear:hover,
+#vrm-attendance-status-menu .vrm-roster-gear:focus-visible {
   color: #fff;
-  background: rgba(142, 156, 160, 0.22);
+  background: transparent;
 }
 
-#vrm-attendance-missing .vrm-settings-button svg {
-  width: 18px;
-  height: 18px;
+#vrm-attendance-status-menu .vrm-roster-gear svg {
+  width: 14px;
+  height: 14px;
   fill: currentColor;
 }
 
@@ -314,8 +355,11 @@
   align-items: center;
   gap: 9px;
   padding: 4px 12px;
-  opacity: 0.72;
-  font-size: 13px;
+  /* Строка не глушится opacity: она перекрывала и эмодзи статусов. Прежняя
+     приглушённость имени и кружка задана их собственными цветами. */
+  /* Как у имён в штатном списке участников: вариант inline, 12px/1.33. */
+  font-size: 12px;
+  line-height: 1.33;
 }
 
 #vrm-attendance-missing .vrm-missing-avatar {
@@ -328,7 +372,7 @@
   border: 0;
   padding: 0;
   color: #f4f6f7;
-  background: #8e9ca0;
+  background: rgba(142, 156, 160, 0.74);
   cursor: pointer;
   font-family: inherit;
   font-size: 9px;
@@ -341,7 +385,10 @@
   outline-offset: 1px;
 }
 
+/* У кружка со статусом лёгкая подложка вместо плотной серой: эмодзи видно
+   в полную яркость. */
 #vrm-attendance-missing .vrm-missing-avatar.vrm-has-status {
+  background: rgba(142, 156, 160, 0.22);
   font-size: 15px;
   line-height: 1;
 }
@@ -349,7 +396,8 @@
 #vrm-attendance-missing .vrm-missing-name {
   min-width: 0;
   overflow: hidden;
-  color: #8e9ca0;
+  /* #425052 с бывшей opacity 0.72 на светлой панели — тот же видимый тон. */
+  color: #758083;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -372,8 +420,8 @@
   border: 1px solid rgba(255, 255, 255, 0.75);
   border-radius: 50%;
   padding: 0;
-  background: #20c979;
-  box-shadow: 0 0 0 2px rgba(32, 201, 121, 0.18);
+  background: #43ba16;
+  box-shadow: 0 0 0 2px rgba(67, 186, 22, 0.2);
   cursor: pointer;
   pointer-events: auto;
   transform: translateY(-50%);
@@ -400,11 +448,13 @@
   max-height: calc(100vh - 16px);
   overflow-x: hidden;
   overflow-y: auto;
-  border: 1px solid rgba(142, 156, 160, 0.35);
-  border-radius: 9px;
+  /* Как у меню «Ещё» в VirtualRoom (BlackPopperMenu): чёрный фон без рамки,
+     белый текст, подсветка пунктов — background.fourth. */
+  border: 0;
+  border-radius: 8px;
   padding: 5px;
-  color: #e9eef0;
-  background: #263238;
+  color: #ffffff;
+  background: #121516;
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.38);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -416,9 +466,9 @@
   align-items: center;
   gap: 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 7px 9px;
-  color: #e9eef0;
+  color: #ffffff;
   background: transparent;
   cursor: pointer;
   font: 12px/1.25 inherit;
@@ -443,9 +493,12 @@
   text-overflow: clip;
 }
 
+/* У выбранного списка постоянной подсветки нет — он отмечен точкой; правило
+   с aria-checked остаётся для меню статусов, где другой метки нет. */
 #vrm-attendance-status-menu .vrm-status-option:hover,
-#vrm-attendance-status-menu .vrm-status-option[aria-checked="true"] {
-  background: rgba(142, 156, 160, 0.2);
+#vrm-attendance-status-menu .vrm-status-option:active,
+#vrm-attendance-status-menu .vrm-status-option[aria-checked="true"]:not(.vrm-roster-option) {
+  background: #425052;
 }
 
 #vrm-attendance-status-menu .vrm-status-icon {
@@ -505,12 +558,12 @@
 #vrm-attendance-status-menu .vrm-status-range input {
   min-width: 0;
   height: 34px;
-  border: 1px solid #66767d;
+  border: 1px solid #425052;
   border-radius: 6px;
   padding: 0 5px;
   color: #eef2f3;
   color-scheme: dark;
-  background: #344249;
+  background: #2a3335;
   font: 10px inherit;
 }
 
@@ -522,7 +575,51 @@
   border-radius: 6px;
   padding: 6px 9px;
   color: #fff;
-  background: #20a66a;
+  background: #43ba16;
   cursor: pointer;
   font: 700 11px inherit;
+}
+
+#vrm-attendance-status-menu .vrm-status-range-apply:hover {
+  background: #2b9b0e;
+}
+
+#vrm-attendance-status-menu .vrm-status-range-apply:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Меню пинга: текст сообщения можно поправить перед отправкой. */
+#vrm-attendance-status-menu.vrm-ping-menu {
+  width: 280px;
+}
+
+#vrm-attendance-status-menu .vrm-ping-text {
+  width: 100%;
+  min-height: 48px;
+  max-height: 40vh;
+  overflow-y: auto;
+  /* Поле растёт под текст силами браузера; JS-замер остаётся запасным
+     путём для Chrome младше 123. */
+  field-sizing: content;
+  border: 1px solid #425052;
+  border-radius: 6px;
+  padding: 5px 7px;
+  color: #eef2f3;
+  background: #2a3335;
+  font: 11px inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+#vrm-attendance-status-menu .vrm-ping-note {
+  margin-top: 6px;
+  color: #92a1a7;
+  font-size: 10px;
+}
+
+/* Рупор при занятости не вращается — просто подсвечивается, пока идёт
+   чтение канала. */
+#vrm-attendance-missing .vrm-ping-button.vrm-is-busy {
+  color: #43ba16;
 }

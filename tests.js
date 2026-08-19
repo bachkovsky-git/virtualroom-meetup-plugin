@@ -360,6 +360,49 @@ check("человек найден по логину из Mattermost",
 check("отсутствующий не найден",
   VRMeetups.participantIsPresent(roster, "Кузнецов Никита", ["ivan.ivanov"]), false);
 
+// --- пинг отсутствующих ----------------------------------------------------
+
+const pingMembers = [
+  { id: "1", username: "kuznetsov.nick", name: "Кузнецов Никита", aliases: ["kuznetsov.nick"], customStatus: null },
+  { id: "2", username: "sidorov.alex", name: "Сидоров Алексей", aliases: ["sidorov.alex"], customStatus: null },
+  { id: "3", username: "petrova.m", name: "Мария Петрова", aliases: ["petrova.m"],
+    customStatus: { emoji: "palm_tree", text: "Отпуск", kind: "vacation", icon: "🌴", label: "в отпуске" } }
+];
+
+const pingResult = VRMattermost.pingTargets(
+  ["Кузнецов Никита", "Сидоров Алексей Петрович", "Петрова Мария", "Иванов Иван"],
+  pingMembers,
+  { [VRMeetups.comparisonKey("Кузнецов Никита")]: { type: "vacation", from: null, until: null } },
+  "2026-08-19"
+);
+check("свой активный статус исключает из пинга",
+  pingResult.excused.some((item) => item.name === "Кузнецов Никита" && item.reason === "в отпуске"), true);
+check("кастомный статус из Mattermost исключает из пинга",
+  pingResult.excused.some((item) => item.name === "Петрова Мария" && item.reason === "в отпуске"), true);
+check("участник без статуса пингуется, имя с отчеством находит члена канала",
+  pingResult.mentions.find((item) => item.name === "Сидоров Алексей Петрович")?.username, "sidorov.alex");
+check("участник без члена канала упоминается без логина",
+  pingResult.mentions.find((item) => item.name === "Иванов Иван")?.username ?? null, null);
+
+const expiredStatus = VRMattermost.pingTargets(
+  ["Кузнецов Никита"], pingMembers,
+  { [VRMeetups.comparisonKey("Кузнецов Никита")]: { type: "absent", from: null, until: "2026-08-01" } },
+  "2026-08-19"
+);
+check("истёкший свой статус не мешает пингу",
+  expiredStatus.mentions.map((item) => item.username), ["kuznetsov.nick"]);
+
+check("текст пинга собирается с упоминаниями и именами без логина",
+  VRMattermost.pingMessage(
+    [{ name: "Сидоров Алексей", username: "sidorov.alex" }, { name: "Иванов Иван", username: null }],
+    "ELEM Daily"
+  ),
+  "Ждём вас на встрече «ELEM Daily»: @sidorov.alex Иванов Иван");
+check("без названия встречи текст короче",
+  VRMattermost.pingMessage([{ name: "Иванов Иван", username: "ivan" }], ""),
+  "Ждём вас на встрече: @ivan");
+check("пустые упоминания дают пустой текст", VRMattermost.pingMessage([], "X"), "");
+
 // --- bridge.js -------------------------------------------------------------
 
 check("имя собирается как Фамилия Имя Отчество",

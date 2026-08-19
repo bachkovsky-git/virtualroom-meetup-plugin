@@ -36,7 +36,7 @@ main {
   place-items: center;
   border-radius: 12px;
   color: #fff;
-  background: #20a66a;
+  background: #43ba16;
   font-size: 22px;
   font-weight: 800;
 }
@@ -64,7 +64,7 @@ label:not(.room-binding) {
   flex: 0 0 auto;
   margin: -4px 0 4px;
   padding: 4px;
-  color: #178b58;
+  color: #2b9b0e;
   background: transparent;
   font-size: 12px;
 }
@@ -87,8 +87,8 @@ input[type="url"] {
 select:focus,
 input[type="url"]:focus,
 input[type="text"]:focus {
-  border-color: #20a66a;
-  box-shadow: 0 0 0 3px rgba(32, 166, 106, 0.13);
+  border-color: #43ba16;
+  box-shadow: 0 0 0 3px rgba(67, 186, 22, 0.13);
 }
 
 textarea {
@@ -114,7 +114,7 @@ textarea {
   line-height: 1.35;
 }
 
-.room-binding input { margin: 1px 0 0; accent-color: #20a66a; }
+.room-binding input { margin: 1px 0 0; accent-color: #43ba16; }
 
 .roster-count {
   flex: 0 0 auto;
@@ -155,8 +155,8 @@ textarea {
 
 .mode-option.is-active {
   color: #fff;
-  background: #20a66a;
-  box-shadow: 0 1px 3px rgba(23, 139, 88, 0.35);
+  background: #43ba16;
+  box-shadow: 0 1px 3px rgba(43, 155, 14, 0.35);
 }
 
 .mode-panel { margin-bottom: 13px; }
@@ -169,7 +169,7 @@ textarea {
   align-items: center;
   gap: 8px;
   margin: -6px 0 12px;
-  color: #12643f;
+  color: #2b9b0e;
   font-size: 11px;
 }
 
@@ -242,7 +242,7 @@ textarea {
   align-items: center;
   gap: 7px;
   margin: -6px 0 11px;
-  color: #12643f;
+  color: #2b9b0e;
   font-size: 11px;
 }
 
@@ -250,8 +250,8 @@ textarea {
   width: 12px;
   height: 12px;
   flex: 0 0 12px;
-  border: 2px solid rgba(32, 166, 106, 0.25);
-  border-top-color: #20a66a;
+  border: 2px solid rgba(67, 186, 22, 0.25);
+  border-top-color: #43ba16;
   border-radius: 50%;
   animation: mm-spin 720ms linear infinite;
 }
@@ -267,7 +267,7 @@ textarea {
 .mm-fields label { font-size: 12px; }
 .mm-fields .hint { margin: 9px 0 11px; }
 .mm-fields .mm-error { color: #8b3030; }
-.mm-fields .mm-success { color: #12643f; }
+.mm-fields .mm-success { color: #2b9b0e; }
 
 .inline-row {
   display: flex;
@@ -343,7 +343,7 @@ textarea.readonly {
 }
 
 .participant-card input:focus,
-.participant-card select:focus { border-color: #20a66a; }
+.participant-card select:focus { border-color: #43ba16; }
 
 .participant-remove {
   display: grid;
@@ -379,8 +379,8 @@ textarea.readonly {
 }
 
 textarea:focus {
-  border-color: #20a66a;
-  box-shadow: 0 0 0 3px rgba(32, 166, 106, 0.13);
+  border-color: #43ba16;
+  box-shadow: 0 0 0 3px rgba(67, 186, 22, 0.13);
 }
 
 .hint {
@@ -403,8 +403,8 @@ button {
 }
 
 button:disabled { cursor: wait; opacity: 0.65; }
-.primary { color: #fff; background: #20a66a; }
-.primary:hover:not(:disabled) { background: #178b58; }
+.primary { color: #fff; background: #43ba16; }
+.primary:hover:not(:disabled) { background: #2b9b0e; }
 .secondary { color: #344249; background: #e5eaec; }
 .secondary:hover:not(:disabled) { background: #d8dfe2; }
 .danger {
@@ -424,6 +424,6 @@ button:disabled { cursor: wait; opacity: 0.65; }
 }
 
 .status.visible { display: block; }
-.status.success { color: #12643f; background: #e2f5eb; }
+.status.success { color: #2b9b0e; background: #e2f5eb; }
 .status.warning { color: #735514; background: #fff2cf; }
 .status.error { color: #8b3030; background: #fee8e8; }
