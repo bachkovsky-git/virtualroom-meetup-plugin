@@ -4,6 +4,7 @@
 // Запуск: node tests.js
 const VRMeetups = require("./common.js");
 const VRMattermost = require("./mattermost.js");
+const VRMBridge = require("./bridge.js");
 
 let failures = 0;
 let checks = 0;
@@ -358,6 +359,58 @@ check("человек найден по логину из Mattermost",
   VRMeetups.participantIsPresent(roster, "Иванов Иван", ["ivan.ivanov"]), true);
 check("отсутствующий не найден",
   VRMeetups.participantIsPresent(roster, "Кузнецов Никита", ["ivan.ivanov"]), false);
+
+// --- bridge.js -------------------------------------------------------------
+
+check("имя собирается как Фамилия Имя Отчество",
+  VRMBridge.formatWireName({ firstName: "Никита", middleName: "Игоревич", lastName: "Кузнецов" }),
+  "Кузнецов Никита Игоревич");
+check("имя без отчества",
+  VRMBridge.formatWireName({ firstName: "Никита", lastName: "Кузнецов" }), "Кузнецов Никита");
+check("имя без фамилии",
+  VRMBridge.formatWireName({ firstName: "Никита" }), "Никита");
+check("лишние пробелы в полях схлопываются",
+  VRMBridge.formatWireName({ firstName: "  Никита ", lastName: " Кузнецов" }), "Кузнецов Никита");
+check("пустой участник даёт пустое имя", VRMBridge.formatWireName({}), "");
+check("не-объект даёт пустое имя", VRMBridge.formatWireName(null), "");
+
+check("боты и пустые имена отфильтровываются",
+  VRMBridge.namesFromParticipants([
+    { firstName: "Никита", lastName: "Кузнецов", type: "user" },
+    { firstName: "Бот", lastName: "Записи", type: "bot" },
+    { type: "user" },
+    null,
+    42
+  ]),
+  ["Кузнецов Никита"]);
+check("view-модель с вложенным user тоже разбирается",
+  VRMBridge.namesFromParticipants([
+    { id: "1", user: { firstName: "Алексей", lastName: "Сидоров", type: "user" } },
+    { id: "2", user: { firstName: "Бот", type: "bot" } }
+  ]),
+  ["Сидоров Алексей"]);
+check("не-массив участников даёт пустой список",
+  VRMBridge.namesFromParticipants("мусор"), []);
+
+check("конверт разбирается",
+  VRMBridge.parseEnvelope(VRMBridge.envelope("PARTICIPANTS", { names: [], seq: 1 })),
+  { type: "PARTICIPANTS", payload: { names: [], seq: 1 } });
+check("чужой источник отбрасывается",
+  VRMBridge.parseEnvelope({ source: "другой", type: "PARTICIPANTS", payload: {} }), null);
+check("неизвестный тип отбрасывается",
+  VRMBridge.parseEnvelope({ source: VRMBridge.SOURCE, type: "EVAL", payload: {} }), null);
+check("не-объект отбрасывается", VRMBridge.parseEnvelope("строка"), null);
+check("payload-массив отбрасывается",
+  VRMBridge.parseEnvelope({ source: VRMBridge.SOURCE, type: "REFRESH", payload: [] }), null);
+
+check("валидный payload участников принимается",
+  VRMBridge.validParticipantsPayload({ names: ["Кузнецов Никита"], seq: 3 }), true);
+check("payload без seq отбрасывается",
+  VRMBridge.validParticipantsPayload({ names: [] }), false);
+check("payload с не-строкой в names отбрасывается",
+  VRMBridge.validParticipantsPayload({ names: ["Имя", 5], seq: 1 }), false);
+check("payload с names-не-массивом отбрасывается",
+  VRMBridge.validParticipantsPayload({ names: "Имя", seq: 1 }), false);
 
 console.log(failures ? `\n${failures} из ${checks} проверок не прошли` : `Все ${checks} проверок прошли`);
 process.exit(failures ? 1 : 0);

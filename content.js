@@ -243,6 +243,27 @@
     mattermostRefreshTimer = setInterval(refreshMattermostStatuses, 300000);
   }
 
+  // Лёгкая проверка по данным из page-hook: имена уже известны, прокрутка
+  // не нужна. Повторяет сравнение из scanParticipants без чтения DOM.
+  async function refreshFromHook() {
+    if (scanning || !activeRoster) return;
+    const panel = findPanel();
+    if (!panel) return;
+    await refreshMattermost(false);
+    const actualNames = namesToMap(VRMSource.lastNames || []);
+    lastActualNames = actualNames;
+    const actualNameKeys = new Set(actualNames.keys());
+    const missing = activeRoster.participants.filter(
+      (name) => !VRMeetups.participantIsPresent(activeRoster, name, actualNameKeys)
+    );
+    reportMeeting();
+    const rows = missing.map(rowView);
+    renderResult(panel, rows, { expected: activeRoster.participants.length });
+    rememberResult(rows);
+    updatePresentMarkers();
+    ignoreMutationsUntil = Date.now() + 1000;
+  }
+
   // --- Кеш последней проверки ---------------------------------------------
 
   function currentResultKey() {
@@ -348,6 +369,29 @@
       setTimeout(() => { programmaticScroll = false; }, 150);
     }
     return namesByKey;
+  }
+
+  function namesToMap(names) {
+    const namesByKey = new Map();
+    (names || []).forEach((name) => {
+      const key = VRMeetups.comparisonKey(name);
+      if (key && !namesByKey.has(key)) namesByKey.set(key, name);
+    });
+    return namesByKey;
+  }
+
+  // Основной источник имён — сервисы самого клиента через page-hook: без
+  // прокрутки и мгновенно. Прокрутка списка остаётся запасным путём на случай,
+  // когда хук не завёлся или сломался после обновления VirtualRoom.
+  async function collectActualNames(panel) {
+    if (VRMSource.state === "hook") {
+      try {
+        return namesToMap(await VRMSource.refresh());
+      } catch (error) {
+        // Хук не ответил — читаем DOM, как раньше.
+      }
+    }
+    return collectAllNames(panel.scroller);
   }
 
   function expectedParticipantForActual(actualName) {
@@ -1179,7 +1223,7 @@
       markRefreshing(true);
       // Состав из Mattermost подтягивается до сравнения: список мог измениться.
       await refreshMattermost(false);
-      const actualNames = await collectAllNames(panel.scroller);
+      const actualNames = await collectActualNames(panel);
       lastActualNames = actualNames;
       const actualNameKeys = new Set(actualNames.keys());
       const missing = activeRoster.participants.filter(
@@ -1210,6 +1254,16 @@
   // панель, и делать это под рукой пользователя нельзя.
   function scheduleAutoScan() {
     if (!activeRoster || scanning || Date.now() < ignoreMutationsUntil) return;
+    // С работающим хуком прокрутка не нужна: мутации списка — это лишь
+    // перерисовка панели, а состав приходит событиями. Пересчитываем из
+    // последних присланных имён, вся defer-механика остаётся режиму dom.
+    if (VRMSource.state === "hook") {
+      clearTimeout(autoScanTimer);
+      autoScanTimer = setTimeout(() => {
+        if (!scanning) refreshFromHook().catch(() => {});
+      }, 300);
+      return;
+    }
     if (!autoScanWaitingSince) autoScanWaitingSince = Date.now();
     clearTimeout(autoScanTimer);
     autoScanTimer = setTimeout(() => {
@@ -1290,6 +1344,9 @@
     );
     if (participantsChanged) {
       watchUserActivity();
+      // Раз на странице есть панель участников — это VirtualRoom, пора
+      // подключать источник из клиента. Повторные вызовы идемпотентны.
+      if (findPanel()) VRMSource.start();
       // Панель могли только что открыть: блок возвращается из кеша сразу,
       // не дожидаясь проверки.
       showRememberedResult();
@@ -1318,11 +1375,20 @@
     }).observe(title, { childList: true, characterData: true, subtree: true });
   }
 
+  // Вход и выход участников приходят из page-hook событиями — раздел
+  // обновляется сразу, без прокрутки и без ожидания автопроверки.
+  let hookNamesTimer = 0;
+  VRMSource.onNames(() => {
+    clearTimeout(hookNamesTimer);
+    hookNamesTimer = setTimeout(() => refreshFromHook().catch(() => {}), 300);
+  });
+
   observer.observe(document.documentElement, { childList: true, subtree: true });
   watchTitle();
   Promise.all([loadActiveRoster(), VRMStorage.loadResults()]).then(([, results]) => {
     resultCache = results;
     watchUserActivity();
+    if (findPanel()) VRMSource.start();
     showRememberedResult();
     updatePresentMarkers();
     if (activeRoster && findPanel()) scheduleAutoScan();
